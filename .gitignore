@@ -1,0 +1,53 @@
+# Файлы настроек IDE
+.idea/
+.vscode/
+
+# Файлы зависимостей Python
+__pycache__/
+*.pyc
+.env
+.env.*
+.python-version
+*.pid
+
+# Файлы зависимостей Node.js
+node_modules/
+npm-debug.log*
+
+# Файлы операционных систем
+.DS_Store
+Thumbs.db
+
+cache/
+cache_graphs/
+cache_data/
+__pycache__
+
+# Виртуальные окружения
+venv/
+.venv/
+ENV/
+env/
+
+# Кэш и артефакты инструментов
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Сборки/дистрибутивы
+build/
+dist/
+*.egg-info/
+
+# Журналы и временные файлы
+*.log
+drone_planner.log
+*.tmp
+*.swp
+
+# Сгенерированные карты/отчеты
+route_map.html
+click_map.html

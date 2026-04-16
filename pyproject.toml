@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "gps-dron-monitoring"
+version = "0.1.0"
+description = "Demonstration prototype for GPS/GNSS-based drone delivery monitoring in Volgograd."
+authors = ["Diploma Prototype"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+aiofiles = "23.2.1"
+fastapi = "0.104.1"
+folium = "0.15.1"
+geopandas = "0.14.1"
+geopy = "2.4.1"
+matplotlib = "3.7.2"
+networkx = "3.2.1"
+numpy = "1.24.3"
+osmnx = "1.7.0"
+pandas = "2.0.3"
+pillow = "10.0.1"
+pyproj = "3.6.0"
+pydantic = "2.5.0"
+python-dateutil = "2.8.2"
+python-multipart = "0.0.6"
+pytz = "2023.3"
+redis = "5.0.7"
+requests = "2.31.0"
+rtree = "1.0.1"
+scipy = "1.11.2"
+shapely = "2.0.2"
+uvicorn = { version = "0.24.0", extras = ["standard"] }
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Постановка миссии в реальном времени</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:#eef3f8; color:#182433; }
+    .wrap { display:grid; grid-template-columns: 360px 1fr; height:100vh; }
+    .sidebar { background:#fff; border-right:1px solid #d8e0ea; padding:18px; overflow:auto; }
+    #map { height:100vh; }
+    h1 { margin:0 0 8px; font-size:22px; }
+    .muted { color:#5f6f86; font-size:13px; }
+    .toolbar, .field { margin-top:14px; }
+    button, input { width:100%; padding:11px 12px; border-radius:10px; border:1px solid #cdd7e3; font-size:14px; }
+    button { cursor:pointer; background:#1f6feb; color:#fff; border:none; margin-top:8px; }
+    button.secondary { background:#eef3fb; color:#182433; border:1px solid #d8e0ea; }
+    .status { margin-top:14px; padding:12px; border-radius:10px; background:#f6f8fc; border:1px solid #e0e7f0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <aside class="sidebar">
+      <h1>Новая миссия</h1>
+      <div class="muted">Кликните по карте и задайте старт и точку доставки. Запретные зоны можно добавить при необходимости, но это не обязательно.</div>
+      <div class="toolbar">
+        <button class="secondary" onclick="setMode('start')">Выбрать старт</button>
+        <button class="secondary" onclick="setMode('delivery')">Выбрать доставку</button>
+        <button class="secondary" onclick="setMode('nofly')">Выбрать запретную зону</button>
+      </div>
+      <div class="field">
+        <input id="title" placeholder="Название миссии" value="Миссия доставки Волгоград" />
+      </div>
+      <div class="field">
+        <input id="radius" type="number" min="50" max="2000" value="250" />
+      </div>
+      <button class="secondary" onclick="clearNoFlyZones()">Очистить все запретные зоны</button>
+      <div id="zoneList" class="status">Запретных зон пока нет.</div>
+      <button onclick="launchMission()">Запустить миссию в реальном времени</button>
+      <button class="secondary" onclick="createSynthetic()">Создать синтетическую миссию</button>
+      <a href="/monitor" style="display:block;margin-top:14px;color:#1f6feb;text-decoration:none;">Открыть мониторинг</a>
+      <div id="status" class="status">Режим: выбор старта.</div>
+    </aside>
+    <main id="map"></main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([48.7080, 44.5133], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    let mode = 'start';
+    let startMarker = null;
+    let deliveryMarker = null;
+    let startPoint = null;
+    let deliveryPoint = null;
+    let noFlyZones = [];
+    const MODE_LABELS = {
+      start: 'выбор старта',
+      delivery: 'выбор точки доставки',
+      nofly: 'добавление запретной зоны',
+    };
+
+    function setMode(value){
+      mode = value;
+      document.getElementById('status').textContent = `Режим: ${MODE_LABELS[value] || value}.`;
+    }
+
+    function renderZoneList(){
+      const root = document.getElementById('zoneList');
+      if (!noFlyZones.length){
+        root.textContent = 'Запретных зон пока нет.';
+        return;
+      }
+      root.innerHTML = noFlyZones.map((zone, idx) => `#${idx + 1}: ${zone.center[0].toFixed(5)}, ${zone.center[1].toFixed(5)} • ${Math.round(zone.radius_m)} м`).join('<br>');
+    }
+
+    function clearNoFlyZones(){
+      noFlyZones.forEach(zone => {
+        if (zone.marker) map.removeLayer(zone.marker);
+        if (zone.circle) map.removeLayer(zone.circle);
+      });
+      noFlyZones = [];
+      renderZoneList();
+    }
+
+    map.on('click', (e) => {
+      const point = [e.latlng.lat, e.latlng.lng];
+      if (mode === 'start'){
+        startPoint = point;
+        if (startMarker) map.removeLayer(startMarker);
+        startMarker = L.marker(point).addTo(map).bindPopup('Старт').openPopup();
+      } else if (mode === 'delivery'){
+        deliveryPoint = point;
+        if (deliveryMarker) map.removeLayer(deliveryMarker);
+        deliveryMarker = L.marker(point).addTo(map).bindPopup('Доставка').openPopup();
+      } else {
+        const radius = Number(document.getElementById('radius').value || 250);
+        const marker = L.marker(point).addTo(map).bindPopup(`Запретная зона ${noFlyZones.length + 1}`).openPopup();
+        const circle = L.circle(point, { radius, color:'#dc2626', fillOpacity:0.08 }).addTo(map);
+        noFlyZones.push({ center: point, radius_m: radius, marker, circle });
+        renderZoneList();
+      }
+    });
+
+    async function launchMission(){
+      if (!startPoint || !deliveryPoint){
+        document.getElementById('status').textContent = 'Нужно задать старт и точку доставки.';
+        return;
+      }
+      const payload = {
+        city: 'Volgograd, Russia',
+        title: document.getElementById('title').value || 'Миссия доставки Волгоград',
+        start: { lat: startPoint[0], lon: startPoint[1] },
+        delivery: { lat: deliveryPoint[0], lon: deliveryPoint[1] },
+        drone_type: 'cargo'
+      };
+      if (noFlyZones.length){
+        payload.no_fly_center = { lat: noFlyZones[0].center[0], lon: noFlyZones[0].center[1] };
+        payload.no_fly_radius_m = Number(noFlyZones[0].radius_m || 250);
+        payload.no_fly_zones = noFlyZones.map(zone => ({ center: { lat: zone.center[0], lon: zone.center[1] }, radius_m: zone.radius_m }));
+      }
+      const response = await fetch('/api/missions/live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (data.ok){
+        document.getElementById('status').textContent = `Миссия ${data.mission.code} запущена. Переходим к мониторингу.`;
+        setTimeout(() => location.href = '/monitor', 900);
+      } else {
+        document.getElementById('status').textContent = data.error || 'Не удалось создать миссию.';
+      }
+    }
+
+    async function createSynthetic(){
+      const response = await fetch('/api/missions/synthetic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city: 'Volgograd, Russia', title: 'Синтетическая миссия Волгоград', start_live: false })
+      });
+      const data = await response.json();
+      if (data.ok){
+        document.getElementById('status').textContent = `Синтетическая миссия ${data.mission.code} создана.`;
+      } else {
+        document.getElementById('status').textContent = data.error || 'Ошибка создания синтетической миссии.';
+      }
+    }
+  </script>
+</body>
+</html>

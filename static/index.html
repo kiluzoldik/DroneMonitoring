@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>🚁 Планировщик дронов</title>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+		:root {
+			--bg-light: #f8fafc;
+			--bg-dark: #0f172a;
+			--sidebar-light: #ffffff;
+			--sidebar-dark: #1e293b;
+			--border-light: #e2e8f0;
+			--border-dark: #334155;
+			--text-light: #1e293b;
+			--text-dark: #e2e8f0;
+			--primary: #3b82f6;
+			--primary-hover: #2563eb;
+			--success: #10b981;
+			--warning: #f59e0b;
+			--danger: #ef4444;
+			--accent: #8b5cf6;
+		}
+
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+			background: var(--bg-light);
+			color: var(--text-light);
+			line-height: 1.6;
+			transition: background 0.3s ease, color 0.3s ease;
+		}
+
+		.theme-dark body {
+			background: var(--bg-dark);
+			color: var(--text-dark);
+		}
+
+		#app {
+			display: flex;
+			height: 100vh;
+			gap: 0;
+		}
+
+		#sidebar {
+			width: 380px;
+			border-right: 2px solid var(--border-light);
+			padding: 20px;
+			box-sizing: border-box;
+			overflow-y: auto;
+			background: var(--sidebar-light);
+			box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+			transition: background 0.3s ease, border-color 0.3s ease;
+		}
+
+		.theme-dark #sidebar {
+			background: var(--sidebar-dark);
+			border-right-color: var(--border-dark);
+			box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+		}
+
+		#rightPanel {
+			width: 320px;
+			border-left: 2px solid var(--border-light);
+			border-right: 2px solid var(--border-light);
+			padding: 20px;
+			box-sizing: border-box;
+			overflow-y: auto;
+			background: var(--sidebar-light);
+			box-shadow: -2px 0 10px rgba(0,0,0,0.05);
+			transition: background 0.3s ease, border-color 0.3s ease;
+			display: flex;
+			flex-direction: column;
+			gap: 16px;
+		}
+
+		.theme-dark #rightPanel {
+			background: var(--sidebar-dark);
+			border-left-color: var(--border-dark);
+			border-right-color: var(--border-dark);
+			box-shadow: -2px 0 10px rgba(0,0,0,0.3);
+		}
+
+		#rightPanel .section {
+			margin-bottom: 0;
+		}
+
+		#map {
+			flex: 1;
+			position: relative;
+		}
+
+		/* KPI Section */
+		.kpi {
+			display: flex;
+			gap: 12px;
+			margin: 20px 0;
+		}
+
+		.kpi > div {
+			flex: 1;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			padding: 16px;
+			border-radius: 12px;
+			text-align: center;
+			color: white;
+			box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+		}
+
+		.kpi .muted {
+			font-size: 12px;
+			opacity: 0.9;
+			font-weight: 500;
+		}
+
+		.kpi div:not(.muted) {
+			font-size: 24px;
+			font-weight: 700;
+			margin-top: 4px;
+		}
+
+		.theme-dark .kpi > div {
+			background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
+		}
+
+		/* Toolbar */
+		.toolbar {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			margin-bottom: 16px;
+			padding-bottom: 16px;
+			border-bottom: 2px solid var(--border-light);
+		}
+
+		.theme-dark .toolbar {
+			border-bottom-color: var(--border-dark);
+		}
+
+		.toolbar h3 {
+			font-size: 24px;
+			font-weight: 700;
+			color: var(--primary);
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		/* Theme Toggle */
+		label[for="themeToggle"] {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			font-size: 13px;
+			cursor: pointer;
+			user-select: none;
+			padding: 8px 12px;
+			border-radius: 8px;
+			transition: background 0.2s;
+		}
+
+		label[for="themeToggle"]:hover {
+			background: rgba(59, 130, 246, 0.1);
+		}
+
+		.theme-dark label[for="themeToggle"]:hover {
+			background: rgba(59, 130, 246, 0.2);
+		}
+
+		/* Orders & Drones */
+		#orders, #drones {
+			min-height: 120px;
+			margin: 16px 0;
+		}
+
+		#rightPanel #orders {
+			flex: 1;
+			min-height: 200px;
+		}
+
+		#weatherInfo div {
+			color: var(--text-light);
+		}
+		.theme-dark #weatherInfo div {
+			color: var(--text-dark);
+		}
+
+		.order, .drone {
+			padding: 12px;
+			border: 2px solid var(--border-light);
+			margin-bottom: 12px;
+			border-radius: 12px;
+			background: var(--sidebar-light);
+			color: var(--text-light);
+			transition: all 0.2s ease;
+			cursor: pointer;
+		}
+
+		.order:hover, .drone:hover {
+			border-color: var(--primary);
+			transform: translateY(-2px);
+			box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+		}
+
+		.theme-dark .order, .theme-dark .drone {
+			border-color: var(--border-dark);
+			background: #1e293b;
+		}
+
+		.theme-dark .order:hover, .theme-dark .drone:hover {
+			border-color: var(--primary);
+			box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+		}
+
+		/* Form Elements - читаемо на белом */
+		label {
+			display: block;
+			margin-top: 12px;
+			margin-bottom: 6px;
+			font-size: 13px;
+			font-weight: 600;
+			color: #1e293b;
+		}
+
+		.theme-dark label {
+			color: var(--text-dark);
+		}
+
+		input, select, textarea {
+			width: 100%;
+			padding: 10px 12px;
+			box-sizing: border-box;
+			border: 2px solid var(--border-light);
+			border-radius: 8px;
+			font-size: 14px;
+			font-family: inherit;
+			background: white;
+			color: var(--text-light);
+			transition: all 0.2s ease;
+		}
+
+		input:focus, select:focus, textarea:focus {
+			outline: none;
+			border-color: var(--primary);
+			box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+		}
+
+		.theme-dark input, .theme-dark select, .theme-dark textarea {
+			background: #0f172a;
+			border-color: var(--border-dark);
+			color: var(--text-dark);
+		}
+
+		.theme-dark input:focus, .theme-dark select:focus, .theme-dark textarea:focus {
+			border-color: var(--primary);
+			box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+		}
+
+		textarea {
+			resize: vertical;
+		}
+
+		/* Buttons */
+		button {
+			padding: 10px 16px;
+			background: var(--primary);
+			color: white;
+			border: none;
+			border-radius: 8px;
+			font-size: 14px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: all 0.2s ease;
+			box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+		}
+
+		button:hover {
+			background: var(--primary-hover);
+			transform: translateY(-1px);
+			box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+		}
+
+		button:active {
+			transform: translateY(0);
+		}
+
+		.mode-btn.active {
+			background: var(--success);
+			box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+		}
+		.mode-btn.active:hover {
+			background: #0d9668;
+		}
+
+		/* Row Layout */
+		.row {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+		}
+
+		.row > * {
+			flex: 1;
+		}
+
+		/* Muted Text - читаемо на белом и тёмном */
+		.muted {
+			color: #475569;
+			font-size: 12px;
+			font-weight: 500;
+		}
+
+		.theme-dark .muted {
+			color: #94a3b8;
+		}
+
+		/* Section - контраст на белом */
+		.section {
+			margin-bottom: 20px;
+			padding: 16px;
+			background: rgba(59, 130, 246, 0.06);
+			border-radius: 12px;
+			border: 1px solid rgba(59, 130, 246, 0.2);
+			color: var(--text-light);
+		}
+
+		.theme-dark .section {
+			background: rgba(59, 130, 246, 0.05);
+			border-color: rgba(59, 130, 246, 0.2);
+			color: var(--text-dark);
+		}
+
+		.section h4 {
+			font-size: 18px;
+			font-weight: 700;
+			margin-bottom: 12px;
+			color: #1d4ed8;
+		}
+		.theme-dark .section h4 {
+			color: var(--primary);
+		}
+
+		/* Headings - контраст на белом фоне */
+		h4 {
+			font-size: 18px;
+			font-weight: 700;
+			margin: 20px 0 12px 0;
+			color: #0f172a;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.theme-dark h4 {
+			color: var(--text-dark);
+		}
+
+		/* Pills */
+		.pill {
+			display: inline-block;
+			padding: 4px 10px;
+			border-radius: 12px;
+			font-size: 11px;
+			font-weight: 600;
+			margin-left: 6px;
+		}
+
+		.pill.good {
+			background: #a7f3d0;
+			color: #064e3b;
+		}
+
+		.theme-dark .pill.good {
+			background: #064e3b;
+			color: #6ee7b7;
+		}
+
+		.pill.warn {
+			background: #fde68a;
+			color: #78350f;
+		}
+
+		.theme-dark .pill.warn {
+			background: #78350f;
+			color: #fbbf24;
+		}
+
+		.pill.bad {
+			background: #fecaca;
+			color: #7f1d1d;
+		}
+
+		.theme-dark .pill.bad {
+			background: #7f1d1d;
+			color: #fca5a5;
+		}
+
+		/* HR */
+		hr {
+			border: none;
+			border-top: 2px solid var(--border-light);
+			margin: 24px 0;
+		}
+
+		.theme-dark hr {
+			border-top-color: var(--border-dark);
+		}
+
+		/* Scrollbar */
+		#sidebar::-webkit-scrollbar {
+			width: 8px;
+		}
+
+		#sidebar::-webkit-scrollbar-track {
+			background: transparent;
+		}
+
+		#sidebar::-webkit-scrollbar-thumb {
+			background: #cbd5e1;
+			border-radius: 4px;
+		}
+
+		.theme-dark #sidebar::-webkit-scrollbar-thumb {
+			background: #475569;
+		}
+
+		#sidebar::-webkit-scrollbar-thumb:hover {
+			background: #94a3b8;
+		}
+
+		.theme-dark #sidebar::-webkit-scrollbar-thumb:hover {
+			background: #64748b;
+		}
+
+		.order-form-block {
+			margin-top: 12px;
+		}
+
+		/* Drone Icon */
+		.drone-icon {
+			background: transparent !important;
+			border: none !important;
+		}
+
+		/* Animations */
+		@keyframes pulse {
+			0%, 100% { opacity: 1; }
+			50% { opacity: 0.5; }
+		}
+
+		.order.pending {
+			animation: pulse 2s infinite;
+		}
+
+		.order-completed {
+			border-color: var(--success);
+			background: rgba(16, 185, 129, 0.06);
+			opacity: 0.95;
+		}
+		.theme-dark .order-completed {
+			background: rgba(16, 185, 129, 0.12);
+		}
+		.order-done-label {
+			margin-top: 8px;
+			font-weight: 600;
+			color: var(--success);
+			font-size: 14px;
+		}
+
+		/* Status Colors - читаемо на белом */
+		.order, .order b {
+			color: var(--text-light);
+		}
+		.order b {
+			color: var(--primary);
+			font-weight: 600;
+		}
+		.theme-dark .order {
+			color: var(--text-dark);
+		}
+		.theme-dark .order b {
+			color: #93c5fd;
+		}
+
+		/* Scrollbar right panel */
+		#rightPanel::-webkit-scrollbar {
+			width: 8px;
+		}
+		#rightPanel::-webkit-scrollbar-track { background: transparent; }
+		#rightPanel::-webkit-scrollbar-thumb {
+			background: #cbd5e1;
+			border-radius: 4px;
+		}
+		.theme-dark #rightPanel::-webkit-scrollbar-thumb {
+			background: #475569;
+		}
+
+		/* Mobile Responsive */
+		@media (max-width: 1200px) {
+			#rightPanel {
+				width: 280px;
+			}
+		}
+		@media (max-width: 768px) {
+			#app {
+				flex-wrap: wrap;
+			}
+
+			#sidebar {
+				width: 100%;
+				max-height: 40vh;
+			}
+
+			#rightPanel {
+				width: 100%;
+				max-height: 35vh;
+				border-left: none;
+				border-right: none;
+				border-top: 2px solid var(--border-light);
+			}
+			.theme-dark #rightPanel {
+				border-top-color: var(--border-dark);
+			}
+
+			#map {
+				width: 100%;
+				height: 50vh;
+			}
+		}
+	</style>
+</head>
+<body>
+<div id="app">
+	<div id="sidebar">
+        <div class="toolbar">
+            <h3>🚁 Заказы</h3>
+            <label style="margin:0" for="themeToggle">
+                <input type="checkbox" id="themeToggle"/>
+                🌙
+            </label>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+            <a href="/monitor" style="display:inline-block; padding:8px 12px; border-radius:8px; background:#1d4ed8; color:#fff; text-decoration:none;">Диспетчерская</a>
+            <a href="/mission-setup" style="display:inline-block; padding:8px 12px; border-radius:8px; background:#e2e8f0; color:#1e293b; text-decoration:none;">Постановка миссии</a>
+        </div>
+        <div class="kpi">
+            <div>
+                <div class="muted">Город</div>
+                <div id="kpiCity">—</div>
+            </div>
+            <div>
+                <div class="muted">Дронов</div>
+                <div id="kpiDrones">0</div>
+            </div>
+            <div>
+                <div class="muted">Заказов</div>
+                <div id="kpiOrders">0</div>
+            </div>
+        </div>
+		<hr />
+        <h4>🎯 Дроны</h4>
+        <div id="drones"></div>
+        <hr />
+        <div class="section">
+            <h4>🏠 База и инвентарь</h4>
+            <label>Координаты базы</label>
+            <div class="row">
+                <input id="base" placeholder="48.7080, 44.5133"/>
+                <button onclick="useClick('base')">📍</button>
+            </div>
+            <div class="row">
+                <input id="invCargo" type="number" min="0" value="2" placeholder="Груз"/>
+                <input id="invOperator" type="number" min="0" value="1" placeholder="Операт."/>
+                <input id="invCleaner" type="number" min="0" value="0" placeholder="Сервис."/>
+            </div>
+            <div class="muted">Грузовые • Операторские • Сервисные</div>
+            <button onclick="saveBase()">💾 Сохранить базу</button>
+        </div>
+        <hr />
+        <h4>➕ Добавить заказ</h4>
+        <label>🚁 Тип дрона (категория для очереди)</label>
+		<select id="droneType">
+            <option value="">По типу заказа</option>
+            <option value="cargo">🚚 Грузовой</option>
+            <option value="operator">📷 Операторский</option>
+            <option value="cleaner">🔧 Сервисный</option>
+		</select>
+
+        <!-- Грузовой: откуда, куда, промежуточные точки -->
+        <div id="orderFormCargo" class="order-form-block">
+            <label>📍 Откуда (широта, долгота или адрес)</label>
+            <input id="from" placeholder="48.7, 44.5 или адрес" />
+            <label>📍 Куда (широта, долгота или адрес)</label>
+            <input id="to" placeholder="48.7, 44.6 или адрес" />
+            <div class="row">
+                <button type="button" onclick="useClick('from')">📍 Откуда</button>
+                <button type="button" onclick="useClick('to')">📍 Куда</button>
+            </div>
+            <label>📍 Промежуточные точки (улицы/адреса, по одной в строке)</label>
+            <textarea id="waypoints" rows="3" placeholder="ул. Пример, 1&#10;ул. Вторая, 5"></textarea>
+        </div>
+
+        <!-- Операторский: точка или область полёта (квадрат/лассо) -->
+        <div id="orderFormOperator" class="order-form-block" style="display:none">
+            <label>Режим задания</label>
+            <div class="row" style="flex-wrap:wrap; gap:8px;">
+                <label style="margin:0; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="radio" name="operatorMode" value="point" checked /> Точка
+                </label>
+                <label style="margin:0; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="radio" name="operatorMode" value="area" /> Квадрат
+                </label>
+                <label style="margin:0; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="radio" name="operatorMode" value="lasso" /> Лассо
+                </label>
+            </div>
+            <div id="operatorPointBlock">
+                <label>📍 Точка назначения (широта, долгота или адрес)</label>
+                <input id="operatorPoint" placeholder="48.7, 44.6 или адрес" />
+                <button type="button" onclick="useClick('operatorPoint')">📍 Указать на карте</button>
+            </div>
+            <div id="operatorAreaBlock" style="display:none">
+                <p class="muted" style="margin-bottom:8px" id="operatorAreaHint">Нажмите «Выделить» и нарисуйте прямоугольник на карте (зажмите левую кнопку и тяните).</p>
+                <button type="button" id="btnDrawOperatorArea" onclick="toggleOperatorAreaDraw()">📐 Выделить область</button>
+                <div id="operatorAreaInfo" class="muted" style="margin-top:8px; font-size:12px;">Область не выбрана</div>
+            </div>
+        </div>
+
+        <!-- Сервисный: только финальная точка -->
+        <div id="orderFormService" class="order-form-block" style="display:none">
+            <label>📍 Финальная точка (широта, долгота или адрес)</label>
+            <input id="toService" placeholder="48.7, 44.6 или адрес" />
+            <button type="button" onclick="useClick('toService')">📍 Указать на карте</button>
+        </div>
+
+        <label>🗂️ Тип заказа</label>
+		<select id="type">
+            <option value="delivery">🚚 доставка</option>
+            <option value="shooting">📷 съёмка</option>
+            <option value="work">🔧 работа</option>
+		</select>
+        <label>⚡ Приоритет (1–10, больше = выше в очереди)</label>
+		<select id="priority">
+            <option value="1">1 — низкий</option>
+            <option value="3">3</option>
+            <option value="5" selected>5 — средний</option>
+            <option value="7">7</option>
+            <option value="10">10 — высокий</option>
+        </select>
+        <label>🔋 Батарея %</label>
+		<input id="battery" type="number" min="1" max="100" value="100" />
+        <div class="row">
+            <input id="batchCount" type="number" min="1" max="10" value="1" placeholder="Кол-во"/>
+            <button onclick="submitOrder()">✅ Отправить</button>
+        </div>
+		<hr />
+        <h4>🚫 Бесполётные зоны</h4>
+        <p class="muted">Shift + зажатая левая кнопка — нарисовать прямоугольник</p>
+        <button onclick="clearZones()">🗑️ Очистить зоны</button>
+		<hr />
+        <h4>⚡ Станции зарядки</h4>
+        <div id="stationBatteryCounts" class="muted" style="margin-bottom:8px;">—</div>
+        <p class="muted">Alt + зажатая левая кнопка — добавить станцию. Ctrl + клик — удалить ближайшую.</p>
+        <div class="row">
+            <button onclick="pushStations()">💾 Сохранить</button>
+            <button onclick="clearStations()">🗑️ Очистить</button>
+        </div>
+        <label>📍 Массовое добавление (по одной координате в строке: lat, lon)</label>
+        <textarea id="stationsBulk" rows="3" placeholder="48.700000, 44.500000&#10;48.710000, 44.520000"></textarea>
+        <button onclick="bulkAddStations()">➕ Добавить станции</button>
+        <h4>🌆 Город</h4>
+		<input id="city" value="Volgograd, Russia" />
+        <button onclick="loadCity()">🗺️ Загрузить</button>
+	</div>
+	<div id="rightPanel">
+        <div class="section battery-mode-panel">
+            <h4>🔋 Режим расхода батареи</h4>
+            <p class="muted" style="margin-bottom:8px">Тест — укороченная дальность для проверки маршрутов через зарядки. Реальность — данные по Wh/km.</p>
+            <div class="row" style="gap:8px; flex-wrap:wrap;">
+                <button type="button" id="btnBatteryTest" onclick="setBatteryMode('test')" class="mode-btn">🧪 Тест</button>
+                <button type="button" id="btnBatteryReality" onclick="setBatteryMode('reality')" class="mode-btn active">📊 Реальность</button>
+            </div>
+            <div class="muted" style="margin-top:6px"><span id="batteryModeLabel">Реальность</span></div>
+        </div>
+        <div class="section weather-panel">
+            <h4>🌤️ Погода</h4>
+            <div id="weatherInfo">
+                <div><span class="muted">Погода:</span> <span id="weatherDesc">—</span></div>
+                <div><span class="muted">Влажность:</span> <span id="weatherHumidity">—</span>%</div>
+                <div><span class="muted">Ветер:</span> <span id="weatherWind">—</span> м/с</div>
+            </div>
+            <button type="button" onclick="refreshWeather()" style="margin-top:8px">🔄 Обновить погоду</button>
+        </div>
+        <h4>📋 Задания</h4>
+        <p class="muted" style="margin-bottom:8px">Заказы в очереди ждут свободный дрон выбранной категории; выше приоритет — раньше выполнится.</p>
+        <div id="orders"></div>
+	</div>
+	<div id="map"></div>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+let map = L.map('map').setView([48.7080, 44.5133], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+let droneMarkers = {};
+let zoneLayers = [];
+let routeLayers = [];
+let historyLayers = {};
+let currentPick = null;
+let changeDestOrderId = null;
+let stationMarkers = [];
+let stations = [];
+let pushStationsTimer = null;
+let operatorAreaBounds = null;
+let operatorAreaPolygon = null;
+let operatorAreaDrawing = false;
+let operatorAreaMode = 'area';  // 'area' = rectangle, 'lasso' = polygon
+let tempOperatorRect = null;
+let tempOperatorPolygon = null;
+let operatorAreaStartLatLng = null;
+function pushStationsDebounced(){
+    if (pushStationsTimer) clearTimeout(pushStationsTimer);
+    pushStationsTimer = setTimeout(()=>{ pushStations(); }, 300);
+}
+
+function updateOrderFormByDroneType(){
+    const droneType = (document.getElementById('droneType').value || '').trim();
+    const cargoBlock = document.getElementById('orderFormCargo');
+    const operatorBlock = document.getElementById('orderFormOperator');
+    const serviceBlock = document.getElementById('orderFormService');
+    cargoBlock.style.display = (droneType === '' || droneType === 'cargo') ? 'block' : 'none';
+    operatorBlock.style.display = droneType === 'operator' ? 'block' : 'none';
+    serviceBlock.style.display = droneType === 'cleaner' ? 'block' : 'none';
+    if (droneType === 'operator'){
+        const mode = document.querySelector('input[name="operatorMode"]:checked');
+        const modeVal = mode ? mode.value : 'point';
+        const isPoint = modeVal === 'point';
+        operatorAreaMode = modeVal === 'lasso' ? 'lasso' : 'area';
+        document.getElementById('operatorPointBlock').style.display = isPoint ? 'block' : 'none';
+        document.getElementById('operatorAreaBlock').style.display = isPoint ? 'none' : 'block';
+        const hint = document.getElementById('operatorAreaHint');
+        if (hint) hint.textContent = operatorAreaMode === 'lasso'
+            ? 'Кликните на карте для добавления точек многоугольника. «Готово» — завершить.'
+            : 'Нажмите «Выделить» и нарисуйте прямоугольник (зажмите левую кнопку и тяните).';
+    }
+    if (droneType !== 'operator'){ operatorAreaDrawing = false; operatorAreaPolygon = null; tempOperatorRect && map.removeLayer(tempOperatorRect); tempOperatorRect = null; tempOperatorPolygon && map.removeLayer(tempOperatorPolygon); tempOperatorPolygon = null; }
+}
+
+function toggleOperatorAreaDraw(){
+    if (operatorAreaMode === 'lasso' && operatorAreaPolygon && operatorAreaPolygon.length >= 3){
+        operatorAreaDrawing = false;
+        const btn = document.getElementById('btnDrawOperatorArea');
+        if (btn) btn.textContent = '📐 Выделить область';
+        tempOperatorPolygon && map.removeLayer(tempOperatorPolygon);
+        tempOperatorPolygon = null;
+        const info = document.getElementById('operatorAreaInfo');
+        if (info) info.textContent = 'Лассо: ' + operatorAreaPolygon.length + ' точек';
+        return;
+    }
+    operatorAreaDrawing = !operatorAreaDrawing;
+    const btn = document.getElementById('btnDrawOperatorArea');
+    if (btn) btn.textContent = operatorAreaDrawing ? (operatorAreaMode === 'lasso' ? '✔ Готово' : '✔ Готово (нарисуйте на карте)') : '📐 Выделить область';
+    if (!operatorAreaDrawing){
+        tempOperatorRect && map.removeLayer(tempOperatorRect);
+        tempOperatorRect = null;
+        if (operatorAreaMode === 'lasso'){ operatorAreaPolygon = null; tempOperatorPolygon && map.removeLayer(tempOperatorPolygon); tempOperatorPolygon = null; }
+    } else if (operatorAreaMode === 'lasso'){
+        operatorAreaPolygon = [];
+        tempOperatorPolygon && map.removeLayer(tempOperatorPolygon);
+        tempOperatorPolygon = null;
+        const info = document.getElementById('operatorAreaInfo');
+        if (info) info.textContent = 'Кликните на карте для добавления точек...';
+    }
+}
+
+let ws;
+function connectWS(){
+	const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+	ws = new WebSocket(`${proto}://${location.host}/ws`);
+ws.onmessage = ev => {
+    const s = JSON.parse(ev.data);
+    if (s.battery_mode != null) updateBatteryModeUI(s.battery_mode);
+    updateOrders(s.orders||[]);
+    window.lastHistories = s.histories || {};
+    updateDrones(s.drones||{});
+    drawZones(s.no_fly_zones||[]);
+    // update stations from server truth and состояние аккумуляторов
+    stations = s.stations || [];
+    window.stationStates = s.station_states || [];
+    drawStations();
+    updateStationCountsUI();
+    // populate base input if empty and server sends base
+    if (s.base && (!document.getElementById('base').value || document.getElementById('base').value.trim()==='')){
+        const [lat, lon] = s.base; document.getElementById('base').value = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    }
+    document.getElementById('kpiCity').textContent = s.city || '—';
+    document.getElementById('kpiDrones').textContent = Object.keys(s.drones||{}).length;
+    document.getElementById('kpiOrders').textContent = (s.orders||[]).length;
+    updateWeatherUI(s.weather);
+};
+	ws.onclose = ()=> setTimeout(connectWS, 1000);
+}
+connectWS();
+
+function updateOrders(orders){
+	const c = document.getElementById('orders');
+	const prevTop = c.scrollTop; const prevHeight = c.scrollHeight;
+	c.innerHTML = '';
+    orders.forEach((o, i)=>{
+		const d = document.createElement('div');
+		d.className = 'order' + (o.status === 'completed' ? ' order-completed' : '');
+        const droneTypeLabel = droneTypeRu(o.drone_type || '');
+        const prio = o.priority != null ? o.priority : 5;
+        d.innerHTML = `#${i+1} <span class="pill ${prio >= 7 ? 'warn' : (prio <= 3 ? 'bad' : 'good')}">${prio}</span> ${o.type} · ${droneTypeLabel} <b>${ruStatus(o.status)}</b><br>${fmt(o.start)} → ${fmt(o.end)}<br>`+
+            (o.id?`<span class="muted">${o.id}</span>`:'')+
+            (o.status==='queued'||o.status==='assigned'?`<div class="row"><button onclick="cancelOrder('${o.id}')">Отменить</button><button onclick="pickNewDestination('${o.id}')">Сменить</button></div>`:(o.status==='completed'?`<div class="order-done-label">✅ Завершён</div>`:''));
+		c.appendChild(d);
+	});
+	// keep scroll stable
+	c.scrollTop = Math.min(prevTop, c.scrollHeight - (prevHeight - prevTop));
+}
+function fmt(p){ return p ? `${p[0].toFixed(5)}, ${p[1].toFixed(5)}` : '-'; }
+
+function droneIconHtml(droneType, color){
+    const base = 'width:18px;height:18px;border:2px solid white;box-shadow:0 0 6px rgba(0,0,0,.4);box-sizing:border-box';
+    if (droneType === 'operator') {
+        return `<div style="${base};background:${color};border-radius:50%"></div>`;
+    }
+    if (droneType === 'cleaner') {
+        return `<div style="${base};background:transparent;border: none; box-shadow: none;"><div style="width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:18px solid ${color};margin:0 auto;filter:drop-shadow(0 0 4px rgba(0,0,0,.4))"></div></div>`;
+    }
+    return `<div style="${base};background:${color};border-radius:0"></div>`;
+}
+
+function updateWeatherUI(w){
+    if (!w) return;
+    const desc = document.getElementById('weatherDesc');
+    const humidity = document.getElementById('weatherHumidity');
+    const wind = document.getElementById('weatherWind');
+    if (desc) desc.textContent = w.description != null ? w.description : (w.weather_code != null ? '—' : '—');
+    if (humidity) humidity.textContent = w.humidity != null ? w.humidity : '—';
+    if (wind) wind.textContent = w.wind_mps != null ? w.wind_mps : '—';
+}
+async function refreshWeather(){
+    try {
+        const r = await fetch('/api/weather/fetch');
+        const j = await r.json();
+        if (j.weather) updateWeatherUI(j.weather);
+    } catch(e) { console.warn('refreshWeather failed', e); }
+}
+async function setBatteryMode(mode){
+    try {
+        const r = await fetch('/api/battery_mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+        const j = await r.json();
+        if (j.ok) updateBatteryModeUI(j.mode);
+    } catch(e) { console.warn('setBatteryMode failed', e); }
+}
+function updateBatteryModeUI(mode){
+    const testBtn = document.getElementById('btnBatteryTest');
+    const realityBtn = document.getElementById('btnBatteryReality');
+    const label = document.getElementById('batteryModeLabel');
+    if (testBtn) testBtn.classList.toggle('active', mode === 'test');
+    if (realityBtn) realityBtn.classList.toggle('active', mode === 'reality');
+    if (label) label.textContent = mode === 'test' ? 'Тест (укороченная дальность)' : 'Реальность';
+}
+
+function updateDrones(drones){
+	// do not reset arrays drastically; remove previous polylines
+	Object.values(routeLayers).forEach(l=> map.removeLayer(l));
+	routeLayers = [];
+    Object.values(historyLayers).forEach(l=> map.removeLayer(l));
+    historyLayers = {};
+	const list = document.getElementById('drones');
+	const prevTop = list.scrollTop; const prevHeight = list.scrollHeight;
+	list.innerHTML='';
+    const palette = ['#4285F4','#EA4335','#FBBC05','#34A853','#9C27B0','#FF9800','#795548','#607D8B'];
+    const ids = Object.keys(drones);
+    for (let idx=0; idx<ids.length; idx++){
+        const id = ids[idx];
+        const d = drones[id];
+        const color = palette[idx % palette.length];
+        const iconHtml = droneIconHtml(d.type, color);
+        const icon = L.divIcon({className:'drone-icon', html: iconHtml});
+        const droneDisplayName = id.startsWith('drone_') ? (droneTypeRu(d.type) + (id.replace('drone_','')||'1')) : id;
+        if (!droneMarkers[id]){
+            droneMarkers[id] = L.marker(d.pos,{icon}).addTo(map).bindPopup(droneDisplayName);
+        }else{
+            droneMarkers[id].setLatLng(d.pos);
+            droneMarkers[id].setIcon(icon);
+            droneMarkers[id].setPopupContent(droneDisplayName);
+        }
+        if (d.route && d.route.length){
+            const poly = L.polyline(d.route, {color}).addTo(map);
+			routeLayers.push(poly);
+		}
+        if (window.lastHistories && window.lastHistories[id] && window.lastHistories[id].length >= 2){
+            const hpoly = L.polyline(window.lastHistories[id], {color, weight:2, opacity:0.6, dashArray:'4 4'}).addTo(map);
+            historyLayers[id] = hpoly;
+        }
+        const item = document.createElement('div');
+        item.className='drone';
+        const displayName = id.startsWith('drone_') ? (droneTypeRu(d.type) + (id.replace('drone_','')||'1')) : id;
+        const eta = d.eta_s!=null?`${Math.round(d.eta_s/60)} мин`:'-';
+        const bat = d.battery!=null?`${d.battery.toFixed(0)}%`:'-';
+        const lq = d.link_quality!=null?qualityPill(d.link_quality):'';
+        const toStreet = (d.route && d.target_idx!=null && d.route[d.target_idx]) ? d.route[d.target_idx] : null;
+        item.innerHTML = `<b>${displayName}</b> • ${ruStatus(d.status)||'-'} ${lq}<br>`+
+            `Заряд: ${bat} • Осталось: ${eta}` + (toStreet?`<br><span class="muted" id="street_${id}">Определение улицы...</span>`:'');
+        item.onclick = ()=> focusDrone(id);
+		list.appendChild(item);
+        if (toStreet){ fetchStreet(toStreet, id); }
+	}
+	// keep scroll stable
+	list.scrollTop = Math.min(prevTop, list.scrollHeight - (prevHeight - prevTop));
+}
+
+function drawZones(zones){
+	zoneLayers.forEach(l=> map.removeLayer(l));
+	zoneLayers = [];
+	zones.forEach(z=>{
+		if ((z.zone_type||'rectangle') === 'circle' && z.center_lat != null && z.center_lon != null && z.radius_m != null){
+			const c = L.circle([z.center_lat, z.center_lon], {radius: z.radius_m, color:'#EA4335', weight:1, fillOpacity:0.12}).addTo(map);
+			zoneLayers.push(c);
+			return;
+		}
+		const b = [[Math.min(z.lat_min, z.lat_max), Math.min(z.lon_min, z.lon_max)], [Math.max(z.lat_min, z.lat_max), Math.max(z.lon_min, z.lon_max)]];
+		const r = L.rectangle(b, {color:'#EA4335', weight:1, fillOpacity:0.2}).addTo(map);
+		zoneLayers.push(r);
+	});
+}
+
+function drawStations(){
+    stationMarkers.forEach(m=> map.removeLayer(m));
+    stationMarkers = [];
+    const states = window.stationStates || [];
+    stations.forEach((s, i)=>{
+        const st = states[i];
+        const charged = st && st.charged != null ? st.charged : 20;
+        const charging = st && st.charging != null ? st.charging : 0;
+        const tip = `⚡ Станция зарядки • Заряжено: ${charged}/20${charging ? `, в зарядке: ${charging}` : ''}`;
+        const m = L.circleMarker(s, {radius:6, color:'#34A853', weight:2, fillColor:'#34A853', fillOpacity:0.6}).addTo(map).bindTooltip(tip);
+        stationMarkers.push(m);
+    });
+}
+
+function updateStationCountsUI(){
+    const el = document.getElementById('stationBatteryCounts');
+    if (!el) return;
+    const states = window.stationStates || [];
+    if (states.length === 0) {
+        el.innerHTML = '<span class="muted">Нет станций или данные не загружены</span>';
+        return;
+    }
+    el.innerHTML = states.map((st, i) => {
+        const charged = st && st.charged != null ? st.charged : 20;
+        const charging = st && st.charging != null ? st.charging : 0;
+        return `<div class="muted">Станция ${i + 1}: <b>${charged}</b> заряжено / 20${charging ? `, в зарядке: ${charging}` : ''}</div>`;
+    }).join('');
+}
+
+async function loadCity(){
+	const city = document.getElementById('city').value;
+	await fetch('/api/load_city', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({city})});
+}
+
+function parseMaybeCoords(s){
+	if (!s) return null;
+	if (s.includes(',')){
+		try{ const [a,b] = s.split(',').map(x=>parseFloat(x.trim())); if (!isNaN(a)&&!isNaN(b)) return [a,b]; }catch(e){}
+	}
+	return null;
+}
+
+async function submitOrder(){
+    const type = document.getElementById('type').value;
+    const droneTypeEl = document.getElementById('droneType');
+    const droneType = droneTypeEl && droneTypeEl.value ? droneTypeEl.value.trim() : '';
+    const priority = parseInt(document.getElementById('priority').value||'5', 10);
+    const battery = parseFloat(document.getElementById('battery').value||'100');
+    const batch = Math.max(1, Math.min(10, parseInt(document.getElementById('batchCount').value||'1')));
+
+    let bodyList = [];
+    if (droneType === 'cleaner'){
+        // Сервисный: только финальная точка
+        const t = (document.getElementById('toService').value||'').trim();
+        const tc = parseMaybeCoords(t);
+        for (let i=0;i<batch;i++){
+            const body = { type_hint: type, battery_level: battery, priority: priority, drone_type: 'cleaner' };
+            if (tc) body.coords_to = tc; else body.address_to = t;
+            bodyList.push(body);
+        }
+    } else if (droneType === 'operator'){
+        const mode = document.querySelector('input[name="operatorMode"]:checked');
+        const isPoint = !mode || mode.value === 'point';
+        if (isPoint){
+            const pt = (document.getElementById('operatorPoint').value||'').trim();
+            const ptc = parseMaybeCoords(pt);
+            for (let i=0;i<batch;i++){
+                const body = { type_hint: type, battery_level: battery, priority: priority, drone_type: 'operator' };
+                if (ptc) body.coords_to = ptc; else body.address_to = pt;
+                bodyList.push(body);
+            }
+        } else {
+            if (operatorAreaMode === 'lasso'){
+                if (!operatorAreaPolygon || operatorAreaPolygon.length < 3){ alert('Нарисуйте лассо: минимум 3 точки'); return; }
+                for (let i=0;i<batch;i++){
+                    const body = { type_hint: type, battery_level: battery, priority: priority, drone_type: 'operator', area_polygon: operatorAreaPolygon };
+                    bodyList.push(body);
+                }
+            } else {
+                if (!operatorAreaBounds){ alert('Выделите область на карте'); return; }
+                const sw = [operatorAreaBounds.lat_min, operatorAreaBounds.lon_min];
+                const ne = [operatorAreaBounds.lat_max, operatorAreaBounds.lon_max];
+                for (let i=0;i<batch;i++){
+                    const body = { type_hint: type, battery_level: battery, priority: priority, drone_type: 'operator', coords_from: sw, coords_to: ne };
+                    bodyList.push(body);
+                }
+            }
+        }
+    } else {
+        // Грузовой или по умолчанию
+        const f = document.getElementById('from').value.trim();
+        const t = document.getElementById('to').value.trim();
+        const waypointsText = (document.getElementById('waypoints').value||'').trim();
+        const wpCoords = [];
+        if (waypointsText){
+            for (const line of waypointsText.split(/\n+/)){
+                const s = line.trim(); if (!s) continue;
+                const pc = parseMaybeCoords(s);
+                if (pc) wpCoords.push(pc);
+            }
+        }
+        const fc = parseMaybeCoords(f); const tc = parseMaybeCoords(t);
+        for (let i=0;i<batch;i++){
+            const body = { type_hint: type, battery_level: battery, priority: priority };
+            if (droneType) body.drone_type = droneType;
+            if (fc) body.coords_from = fc; else body.address_from = f;
+            if (tc) body.coords_to = tc; else body.address_to = t;
+            if (wpCoords.length) body.waypoints = wpCoords;
+            bodyList.push(body);
+        }
+    }
+    for (const body of bodyList){
+        await fetch('/api/orders', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    }
+}
+
+function useClick(which){
+    currentPick = which;
+}
+
+map.on('click', async (e)=>{
+    const {lat, lng} = e.latlng;
+    // Лассо: клик добавляет точку многоугольника
+    if (operatorAreaDrawing && operatorAreaMode === 'lasso'){
+        operatorAreaPolygon = operatorAreaPolygon || [];
+        operatorAreaPolygon.push([lat, lng]);
+        if (tempOperatorPolygon) map.removeLayer(tempOperatorPolygon);
+        if (operatorAreaPolygon.length >= 2){
+            const closed = [...operatorAreaPolygon];
+            if (operatorAreaPolygon.length >= 3) closed.push(operatorAreaPolygon[0]);
+            tempOperatorPolygon = L.polygon(closed, {color:'#3b82f6', weight:2, dashArray:'4', fillOpacity:0.15}).addTo(map);
+        }
+        const info = document.getElementById('operatorAreaInfo');
+        if (info) info.textContent = 'Лассо: ' + operatorAreaPolygon.length + ' точек. «Готово» чтобы завершить.';
+        return;
+    }
+    if (currentPick){
+        const s = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        if (currentPick==='base') document.getElementById('base').value = s; else document.getElementById(currentPick).value = s;
+        currentPick = null;
+        return;
+    }
+    if (changeDestOrderId){
+        updateOrderDestination(changeDestOrderId, [lat, lng]);
+        changeDestOrderId = null;
+        return;
+    }
+    // Add station with Alt+Click (сохраняем сразу, иначе следующий WS через 0.25 с перезапишет stations)
+    if (e.originalEvent.altKey){
+        stations.push([lat, lng]);
+        drawStations();
+        await pushStations();
+        return;
+    }
+});
+
+// rectangle drawing: Shift+Drag = бесполётная зона; режим операторской области = прямоугольник (не лассо)
+let drawing = false; let startLatLng = null; let tempRect = null;
+map.on('mousedown', (e)=>{
+    if (operatorAreaDrawing && operatorAreaMode === 'area'){ drawing = true; startLatLng = e.latlng; tempOperatorRect && map.removeLayer(tempOperatorRect); tempOperatorRect = null; return; }
+    if (!e.originalEvent.shiftKey) return;
+    drawing = true; startLatLng = e.latlng; tempRect && map.removeLayer(tempRect);
+});
+map.on('mousemove', (e)=>{
+    if (!drawing) return;
+    const bounds = L.latLngBounds(startLatLng, e.latlng);
+    if (operatorAreaDrawing && operatorAreaMode === 'area'){ tempOperatorRect && map.removeLayer(tempOperatorRect); tempOperatorRect = L.rectangle(bounds, {color:'#3b82f6', weight:2, dashArray:'4', fillOpacity:0.15}).addTo(map); return; }
+    tempRect && map.removeLayer(tempRect); tempRect = L.rectangle(bounds, {color:'#EA4335', weight:1, dashArray:'4', fillOpacity:0.1}).addTo(map);
+});
+map.on('mouseup', async (e)=>{
+    if (!drawing) return;
+    const bounds = L.latLngBounds(startLatLng, e.latlng);
+    const sw = bounds.getSouthWest(); const ne = bounds.getNorthEast();
+    if (operatorAreaDrawing && operatorAreaMode === 'area'){
+        drawing = false;
+        operatorAreaBounds = { lat_min: sw.lat, lon_min: sw.lng, lat_max: ne.lat, lon_max: ne.lng };
+        operatorAreaPolygon = null;
+        tempOperatorRect && map.removeLayer(tempOperatorRect); tempOperatorRect = null;
+        operatorAreaDrawing = false;
+        const btn = document.getElementById('btnDrawOperatorArea');
+        if (btn) btn.textContent = '📐 Выделить область';
+        const info = document.getElementById('operatorAreaInfo');
+        if (info) info.textContent = `Квадрат: ${sw.lat.toFixed(5)}, ${sw.lng.toFixed(5)} — ${ne.lat.toFixed(5)}, ${ne.lng.toFixed(5)}`;
+        return;
+    }
+    drawing = false;
+    await fetch('/api/no_fly_zones', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({lat_min: sw.lat, lon_min: sw.lng, lat_max: ne.lat, lon_max: ne.lng})});
+    if (tempRect) { map.removeLayer(tempRect); tempRect = null; }
+});
+
+async function clearZones(){
+	const res = await (await fetch('/api/no_fly_zones')).json();
+	for (const z of res){ await fetch(`/api/no_fly_zones/${z.id}`, {method:'DELETE'}); }
+}
+
+function nearestStationIndex(lat, lng){
+    let bi = -1; let bd = 1e18;
+    for (let i=0;i<stations.length;i++){
+        const s = stations[i];
+        const d = Math.hypot(s[0]-lat, s[1]-lng);
+        if (d < bd){ bd = d; bi = i; }
+    }
+    return bi;
+}
+
+map.on('contextmenu', async (e)=>{
+    // Ctrl + right-click to remove nearest station
+    if (!e.originalEvent.ctrlKey) return;
+    const {lat, lng} = e.latlng;
+    const idx = nearestStationIndex(lat, lng);
+    if (idx >= 0){ stations.splice(idx, 1); drawStations(); await pushStations(); }
+});
+
+async function pushStations(){
+    await fetch('/api/stations', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stations})});
+}
+
+function clearStations(){ stations = []; drawStations(); }
+
+function bulkAddStations(){
+    const t = (document.getElementById('stationsBulk').value||'').trim();
+    if (!t) return;
+    for (const line of t.split(/\n+/)){
+        const s = line.trim(); if (!s) continue;
+        const pc = parseMaybeCoords(s); if (pc) stations.push(pc);
+    }
+    drawStations();
+    pushStationsDebounced();
+}
+
+async function cancelOrder(id){
+    if (!id) return;
+    await fetch(`/api/orders/${id}/cancel`, {method:'POST'});
+}
+
+function pickNewDestination(orderId){
+    changeDestOrderId = orderId;
+}
+
+async function updateOrderDestination(orderId, coords){
+    await fetch(`/api/orders/${orderId}/update_destination`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ new_coords_to: coords })
+    });
+}
+
+// Theme toggle
+const themeToggle = document.getElementById('themeToggle');
+themeToggle.addEventListener('change', ()=>{
+    document.documentElement.classList.toggle('theme-dark', themeToggle.checked);
+});
+
+document.getElementById('droneType').addEventListener('change', updateOrderFormByDroneType);
+document.querySelectorAll('input[name="operatorMode"]').forEach(el=> el.addEventListener('change', updateOrderFormByDroneType));
+
+function ruStatus(s){
+    return ({
+'idle':'свободен', 'enroute':'в пути', 'avoidance':'обход препятствия', 'holding':'ожидание', 'low_battery':'низкий заряд', 'zone_escape':'выход из запретной зоны',
+'charging':'зарядка', 'return_base':'возврат на базу', 'return_charge':'на зарядку', 'service_stop':'операция на точке', 'emergency_landed':'аварийная посадка',
+'assigned':'назначен', 'queued':'в очереди', 'cancelled':'отменён', 'completed':'выполнен', 'failed':'аварийно завершён'
+    })[s]||s;
+}
+function droneTypeRu(t){
+    return ({ 'cargo':'грузовой', 'operator':'операторский', 'cleaner':'сервисный' })[t]||t||'—';
+}
+
+function focusDrone(id){
+    const m = droneMarkers[id];
+    if (m){ map.setView(m.getLatLng(), 15); m.openPopup(); }
+}
+
+async function fetchStreet(latlng, droneId){
+    try{
+        const [lat, lon] = latlng;
+        const r = await fetch('/api/reverse', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({lat, lon})});
+        const j = await r.json();
+        const el = document.getElementById(`street_${droneId}`);
+        if (el){ el.textContent = j.address || '—'; }
+    }catch(e){}
+}
+
+function qualityPill(q){
+    let cls = q>=0.75? 'good' : (q>=0.4? 'warn' : 'bad');
+    const pct = Math.round(q*100);
+    return `<span class="pill ${cls}">связь ${pct}%</span>`;
+}
+
+async function saveBase(){
+    const b = document.getElementById('base').value.trim();
+    const bc = parseMaybeCoords(b);
+    const inv = {
+        cargo: parseInt(document.getElementById('invCargo').value||'0'),
+        operator: parseInt(document.getElementById('invOperator').value||'0'),
+        cleaner: parseInt(document.getElementById('invCleaner').value||'0'),
+    };
+    await fetch('/api/base', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({base: bc, inventory: inv})});
+}
+
+// Автозагрузка города при старте (для удобства)
+window.addEventListener('load', ()=>{ loadCity(); updateOrderFormByDroneType(); });
+// Load base, stations and weather on startup to populate UI quickly
+window.addEventListener('load', async ()=>{
+    try{
+        const modeRes = await fetch('/api/battery_mode');
+        const modeJ = await modeRes.json();
+        if (modeJ.mode) updateBatteryModeUI(modeJ.mode);
+    } catch(e){}
+    try{
+        const r = await fetch('/api/base'); const j = await r.json();
+        if (j.base){ const [lat, lon] = j.base; document.getElementById('base').value = `${lat.toFixed(6)}, ${lon.toFixed(6)}`; }
+        if (Array.isArray(j.stations)){ stations = j.stations; drawStations(); }
+    }catch(e){}
+    try{
+        const s = await fetch('/api/state').then(x=>x.json());
+        if (s.weather) updateWeatherUI(s.weather);
+        if (s.station_states) { window.stationStates = s.station_states; updateStationCountsUI(); }
+    }catch(e){}
+});
+</script>
+</body>
+</html>

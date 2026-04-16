@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Мониторинг миссий дронов</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root { --bg:#f3f6fb; --panel:#ffffff; --line:#d7dee9; --text:#172333; --muted:#5f6f86; --accent:#1f6feb; --warn:#d97706; --danger:#c2410c; --ok:#15803d; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Segoe UI, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    .layout { display:grid; grid-template-columns: 320px 1fr 360px; height:100vh; }
+    .panel { background:var(--panel); border-right:1px solid var(--line); overflow:auto; }
+    .panel.right { border-left:1px solid var(--line); border-right:none; }
+    .section { padding:16px; border-bottom:1px solid var(--line); }
+    h1,h2,h3 { margin:0 0 12px; }
+    h1 { font-size:22px; }
+    h3 { font-size:15px; }
+    .muted { color:var(--muted); font-size:13px; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    button, .linkbtn { border:none; background:var(--accent); color:#fff; padding:10px 12px; border-radius:10px; cursor:pointer; text-decoration:none; display:inline-block; font-size:14px; }
+    button.secondary, .linkbtn.secondary { background:#e8eef8; color:var(--text); }
+    #map { height:100vh; }
+    .list { display:flex; flex-direction:column; gap:10px; }
+    .card { border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff; cursor:pointer; }
+    .card.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(31,111,235,0.12); }
+    .grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; }
+    .kpi { border:1px solid var(--line); border-radius:10px; padding:10px; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; background:#eef3fb; margin-top:6px; }
+    .event { border-left:4px solid var(--accent); padding:8px 10px; background:#f8fbff; border-radius:8px; margin-bottom:8px; }
+    .event.warning { border-left-color:var(--warn); background:#fff8ec; }
+    .event.critical { border-left-color:var(--danger); background:#fff2f0; }
+    .event.info { border-left-color:var(--ok); background:#f2fff6; }
+    .code { font-family:Consolas, monospace; font-size:12px; }
+    .stack { display:flex; flex-direction:column; gap:8px; }
+    .field { margin-top:10px; }
+    input { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line); }
+    @media (max-width: 1200px) { .layout { grid-template-columns: 300px 1fr; } .panel.right { display:none; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="panel">
+      <div class="section">
+        <h1>Диспетчерская</h1>
+        <div class="muted">Мониторинг миссий доставки по Волгограду в реальном времени</div>
+        <div class="toolbar">
+          <a class="linkbtn" href="/mission-setup">Новая миссия</a>
+          <button class="secondary" onclick="runSyntheticLiveDemo()">Быстрая демо-миссия</button>
+          <a class="linkbtn secondary" href="/">Базовый интерфейс</a>
+        </div>
+      </div>
+      <div class="section">
+        <h3>Миссии</h3>
+        <div class="toolbar">
+          <button id="scopeActiveBtn" class="secondary" onclick="setMissionScope('active')">Активные миссии</button>
+          <button id="scopeArchiveBtn" class="secondary" onclick="setMissionScope('archive')">Архив миссий</button>
+        </div>
+        <div id="missionList" class="list"></div>
+      </div>
+      <div class="section">
+        <h3>Управление картой</h3>
+        <div class="toolbar">
+          <button onclick="setMapAction('destination')">Сменить доставку</button>
+          <button class="secondary" onclick="setMapAction('zone')">Добавить запретную зону</button>
+          <button class="secondary" onclick="setMapAction(null)">Сбросить режим</button>
+        </div>
+        <div class="field">
+          <input id="zoneRadius" type="number" min="50" max="3000" value="250" />
+        </div>
+        <div id="mapActionStatus" class="muted">Режим карты: просмотр.</div>
+      </div>
+      <div class="section">
+        <h3>Дроны</h3>
+        <div id="droneList" class="list"></div>
+      </div>
+    </aside>
+    <main id="map"></main>
+    <aside class="panel right">
+      <div class="section">
+        <h3>Текущая миссия</h3>
+        <div id="missionDetail" class="muted">Выберите миссию слева.</div>
+      </div>
+      <div class="section">
+        <h3>Карточка дрона</h3>
+        <div id="droneDetail" class="muted">Выберите дрон слева или по миссии.</div>
+      </div>
+      <div class="section">
+        <h3>Логи дрона</h3>
+        <div id="droneLogBox" class="muted">Логи дрона появятся после выбора аппарата.</div>
+      </div>
+      <div class="section">
+        <h3>Команды диспетчера</h3>
+        <div id="commandBox" class="muted">Команды пока не выполнялись.</div>
+      </div>
+      <div class="section">
+        <h3>Станции зарядки</h3>
+        <div id="stationBox" class="muted">Станции появятся после загрузки live-состояния.</div>
+      </div>
+      <div class="section">
+        <h3>События</h3>
+        <div id="eventsBox"></div>
+      </div>
+      <div class="section">
+        <h3>Обозначения</h3>
+        <div class="stack muted">
+          <div><span style="display:inline-block;width:18px;height:0;border-top:4px solid #f97316;vertical-align:middle;margin-right:8px"></span>Фактический пройденный путь</div>
+          <div><span style="display:inline-block;width:18px;height:0;border-top:5px solid #1f6feb;vertical-align:middle;margin-right:8px"></span>Сглаженная траектория</div>
+          <div><span style="display:inline-block;width:18px;height:0;border-top:3px dashed #0f766e;vertical-align:middle;margin-right:8px"></span>Текущий план маршрута</div>
+          <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#dc2626;vertical-align:middle;margin-right:8px"></span>Запретная зона</div>
+        </div>
+      </div>
+      <div class="section">
+        <h3>Запретные зоны</h3>
+        <div id="zoneBox" class="muted">Зон пока нет.</div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([48.7080, 44.5133], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    let selectedMissionId = null;
+    let selectedDroneId = null;
+    let selectedMissionBundle = null;
+    let selectedDroneBundle = null;
+    let latestMissionList = [];
+    let missionScope = 'active';
+    let mapAction = null;
+    let liveState = { drones: {}, stations: [], no_fly_zones: [], station_states: [], histories: {} };
+    let rawLayer = null;
+    let processedLayer = null;
+    let plannedRouteLayer = null;
+    let emergencyAlerts = new Set();
+    let stationLayer = L.layerGroup().addTo(map);
+    let geozoneLayer = L.layerGroup().addTo(map);
+    let runtimeZoneLayer = L.layerGroup().addTo(map);
+    let droneLayer = L.layerGroup().addTo(map);
+    let missionMarkerLayer = L.layerGroup().addTo(map);
+
+    const STATUS_LABELS = {
+      draft: 'черновик',
+      queued: 'в очереди',
+      assigned: 'назначена',
+      in_progress: 'выполняется',
+      synthetic_ready: 'синтетическая',
+      completed: 'завершена',
+      zone_escape: 'выход из запретной зоны',
+      idle: 'свободен',
+      enroute: 'следует по маршруту',
+      holding: 'ожидание',
+      charging: 'на зарядке',
+      return_charge: 'следует к зарядке',
+      return_base: 'возвращается на базу',
+      low_battery: 'низкий заряд',
+      service_stop: 'операция на точке',
+      cancelled: 'отменена',
+      failed: 'аварийно завершена',
+      emergency_landed: 'аварийная посадка',
+    };
+    const DRONE_TYPE_LABELS = {
+      cargo: 'грузовой',
+      operator: 'операторский',
+      cleaner: 'сервисный',
+    };
+    const EVENT_TYPE_LABELS = {
+      MISSION_STARTED: 'Старт миссии',
+      MISSION_COMPLETED: 'Завершение миссии',
+      MISSION_CANCELLED: 'Отмена миссии',
+      MISSION_UPDATED: 'Изменение миссии',
+      SIGNAL_GAP: 'Разрыв сигнала',
+      EXCESS_SPEED: 'Превышение скорости',
+      LOW_BATTERY: 'Низкий заряд',
+      FILTER_OUTLIER: 'Отфильтрованный выброс',
+      ENTER_DELIVERY_ZONE: 'Вход в зону доставки',
+      EXIT_DELIVERY_ZONE: 'Выход из зоны доставки',
+      ENTER_NO_FLY_ZONE: 'Вход в запретную зону',
+      EXIT_NO_FLY_ZONE: 'Выход из запретной зоны',
+      EMERGENCY_LANDING: 'Аварийная посадка',
+    };
+
+    function money(value){ return Number(value || 0).toFixed(2); }
+    function droneTypeLabel(type){ return DRONE_TYPE_LABELS[type] || type || '—'; }
+    function statusLabel(status){ return STATUS_LABELS[status] || status || '—'; }
+    function eventTypeLabel(type){ return EVENT_TYPE_LABELS[type] || type || 'Событие'; }
+    function formatTs(value){ return value ? String(value).replace('T', ' ').replace('Z', ' UTC') : '—'; }
+    function isMissionArchived(mission){ return ['completed', 'cancelled', 'failed', 'synthetic_ready'].includes(mission?.status); }
+    function missionRuntimeHistory(mission){
+      if (!mission?.drone_id) return [];
+      return (liveState.histories || {})[mission.drone_id] || [];
+    }
+    function smoothTrack(points, windowSize = 5){
+      if (!points || points.length < 3) return points || [];
+      const result = [];
+      for (let i = 0; i < points.length; i += 1){
+        const from = Math.max(0, i - windowSize + 1);
+        const slice = points.slice(from, i + 1);
+        const lat = slice.reduce((acc, point) => acc + Number(point.lat ?? point[0]), 0) / slice.length;
+        const lon = slice.reduce((acc, point) => acc + Number(point.lon ?? point[1]), 0) / slice.length;
+        result.push({ lat, lon });
+      }
+      return result;
+    }
+    function clearMissionLayers(){
+      if (rawLayer) { map.removeLayer(rawLayer); rawLayer = null; }
+      if (processedLayer) { map.removeLayer(processedLayer); processedLayer = null; }
+      if (plannedRouteLayer) { map.removeLayer(plannedRouteLayer); plannedRouteLayer = null; }
+      geozoneLayer.clearLayers();
+      missionMarkerLayer.clearLayers();
+    }
+
+    function setMapAction(action){
+      mapAction = action;
+      const label = action === 'destination' ? 'следующий клик меняет точку доставки выбранной миссии' : (action === 'zone' ? 'следующий клик добавляет круговую запретную зону' : 'просмотр');
+      document.getElementById('mapActionStatus').textContent = `Режим карты: ${label}.`;
+    }
+
+    function setMissionScope(scope){
+      missionScope = scope === 'archive' ? 'archive' : 'active';
+      document.getElementById('scopeActiveBtn').classList.toggle('secondary', missionScope !== 'active');
+      document.getElementById('scopeArchiveBtn').classList.toggle('secondary', missionScope !== 'archive');
+      selectedMissionId = null;
+      selectedMissionBundle = null;
+      clearMissionLayers();
+      loadMissions();
+    }
+
+    function renderMissionList(missions){
+      const root = document.getElementById('missionList');
+      root.innerHTML = '';
+      if (!missions.length){ root.innerHTML = '<div class="muted">Пока нет миссий.</div>'; return; }
+      missions.forEach(mission => {
+        const el = document.createElement('div');
+        el.className = 'card' + (selectedMissionId === mission.id ? ' active' : '');
+        el.innerHTML = `<strong>${mission.title}</strong><div class="muted">${mission.code}</div><div class="pill">${statusLabel(mission.status)}</div><div class="muted">Сырые точки: ${mission.counts.raw_track_points} • События: ${mission.counts.events}</div><div class="muted">Дрон: ${mission.drone_id || '—'} • Заказ: ${mission.order_id || '—'}</div>`;
+        el.onclick = () => selectMission(mission.id);
+        root.appendChild(el);
+      });
+    }
+
+    function renderDroneList(drones){
+      const root = document.getElementById('droneList');
+      root.innerHTML = '';
+      const entries = Object.entries(drones || {});
+      if (!entries.length){ root.innerHTML = '<div class="muted">Активных дронов нет.</div>'; return; }
+      entries.forEach(([id, drone]) => {
+        const el = document.createElement('div');
+        el.className = 'card' + (selectedDroneId === id ? ' active' : '');
+        el.innerHTML = `<strong>${id}</strong><div class="muted">${statusLabel(drone.status || '-')}</div><div class="muted">Батарея: ${Math.round(drone.battery || 0)}% • До прибытия: ${Math.round((drone.eta_s || 0)/60)} мин</div><div class="muted code">Заказ: ${drone.active_order_id || '—'}</div>`;
+        el.onclick = () => selectDrone(id);
+        root.appendChild(el);
+      });
+    }
+
+    function drawStations(){
+      stationLayer.clearLayers();
+      (liveState.stations || []).forEach((station, idx) => {
+        const state = (liveState.station_states || [])[idx] || {};
+        L.circleMarker(station, { radius: 7, color: '#1f6feb', weight: 3, fillOpacity: 0.3 })
+          .bindPopup(`Станция зарядки №${idx + 1}<br>Готово батарей: ${state.charged ?? '—'}<br>Идёт зарядка: ${state.charging ?? '—'}`)
+          .addTo(stationLayer);
+      });
+    }
+
+    function renderStationBox(){
+      const root = document.getElementById('stationBox');
+      const stations = liveState.stations || [];
+      const states = liveState.station_states || [];
+      if (!stations.length){
+        root.innerHTML = '<div class="muted">Станции пока не инициализированы.</div>';
+        return;
+      }
+      root.innerHTML = stations.map((station, idx) => {
+        const state = states[idx] || {};
+        return `
+          <div class="card" style="margin-bottom:8px">
+            <strong>Станция №${idx + 1}</strong>
+            <div class="muted">${Number(station[0]).toFixed(5)}, ${Number(station[1]).toFixed(5)}</div>
+            <div class="muted">Готовых батарей: ${state.charged ?? '—'}</div>
+            <div class="muted">Сейчас заряжается: ${state.charging ?? '—'}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function drawRuntimeZones(){
+      runtimeZoneLayer.clearLayers();
+      (liveState.no_fly_zones || []).forEach((zone, idx) => {
+        if ((zone.zone_type || 'rectangle') === 'circle' && zone.center_lat != null){
+          L.circle([zone.center_lat, zone.center_lon], { radius: zone.radius_m, color:'#dc2626', fillOpacity:0.06 }).bindPopup(`Запретная зона №${idx + 1}`).addTo(runtimeZoneLayer);
+          return;
+        }
+        if (zone.lat_min != null){
+          L.rectangle([[Math.min(zone.lat_min, zone.lat_max), Math.min(zone.lon_min, zone.lon_max)], [Math.max(zone.lat_min, zone.lat_max), Math.max(zone.lon_min, zone.lon_max)]], { color:'#dc2626', fillOpacity:0.06 }).addTo(runtimeZoneLayer);
+        }
+      });
+    }
+
+    function renderZoneBox(){
+      const root = document.getElementById('zoneBox');
+      const zones = [...(liveState.no_fly_zones || [])].sort((a, b) => {
+        const aScore = a.mission_id === selectedMissionId ? -1 : 0;
+        const bScore = b.mission_id === selectedMissionId ? -1 : 0;
+        return aScore - bScore;
+      });
+      if (!zones.length){ root.innerHTML = '<div class="muted">Зон пока нет.</div>'; return; }
+      root.innerHTML = zones.map((zone, idx) => {
+        const label = (zone.zone_type || 'rectangle') === 'circle'
+          ? `${Number(zone.center_lat).toFixed(5)}, ${Number(zone.center_lon).toFixed(5)} • ${Math.round(zone.radius_m || 0)} м`
+          : `rect ${idx + 1}`;
+        const owner = zone.mission_id ? (zone.mission_id === selectedMissionId ? 'Текущая миссия' : zone.mission_id) : 'Глобальная зона';
+        return `<div class="card" style="margin-bottom:8px"><strong>Запретная зона №${idx + 1}</strong><div class="muted">${label}</div><div class="muted code">${owner}</div><button style="margin-top:8px" class="secondary" onclick="removeRuntimeZone('${zone.id}')">Удалить</button></div>`;
+      }).join('');
+    }
+
+    function drawMission(mission, rawPoints, processedPoints, geozones, focusMap = true){
+      clearMissionLayers();
+      const runtimeHistory = !isMissionArchived(mission) ? missionRuntimeHistory(mission).map(point => ({ lat: point[0], lon: point[1] })) : [];
+      const actualTrack = runtimeHistory.length ? runtimeHistory : (rawPoints || []);
+      const smoothedTrack = runtimeHistory.length ? smoothTrack(runtimeHistory) : (processedPoints || []);
+      if (actualTrack.length >= 2){
+        rawLayer = L.polyline(actualTrack.map(p => [p.lat ?? p[0], p.lon ?? p[1]]), { color:'#f97316', weight:3, opacity:0.95 }).addTo(map);
+      }
+      if (smoothedTrack.length >= 2){
+        processedLayer = L.polyline(smoothedTrack.map(p => [p.lat ?? p[0], p.lon ?? p[1]]), { color:'#1f6feb', weight:5, opacity:0.7 }).addTo(map);
+      }
+      geozones.forEach(zone => {
+        if (zone.center_lat && zone.center_lon && zone.radius_m){
+          if (zone.zone_type === 'launch_zone' || zone.zone_type === 'delivery_zone'){
+            const color = zone.zone_type === 'delivery_zone' ? '#15803d' : '#9333ea';
+            const label = zone.zone_type === 'delivery_zone' ? 'Точка доставки' : 'Точка старта';
+            L.circleMarker([zone.center_lat, zone.center_lon], { radius: 7, color, weight: 3, fillOpacity: 0.35 })
+              .bindPopup(label)
+              .addTo(missionMarkerLayer);
+          } else {
+            L.circle([zone.center_lat, zone.center_lon], { radius: zone.radius_m, color:'#dc2626', fillOpacity: 0.08 }).bindPopup(zone.name).addTo(geozoneLayer);
+          }
+        }
+      });
+      const runtimeDrone = mission?.drone_id ? (liveState.drones || {})[mission.drone_id] : null;
+      drawSelectedDroneRoute((runtimeDrone && runtimeDrone.route) || []);
+      const focus = (runtimeDrone && runtimeDrone.pos && { lat: runtimeDrone.pos[0], lon: runtimeDrone.pos[1] })
+        || smoothedTrack[smoothedTrack.length - 1]
+        || actualTrack[actualTrack.length - 1];
+      if (focus && focusMap) map.setView([focus.lat, focus.lon], 13);
+      const metrics = mission.metrics || {};
+      document.getElementById('missionDetail').innerHTML = `
+        <div><strong>${mission.title}</strong></div>
+        <div class="muted">${mission.code} • ${statusLabel(mission.status)}</div>
+        <div class="toolbar" style="margin-top:10px">
+          <button ${['completed', 'cancelled', 'failed'].includes(mission.status) ? 'disabled' : ''} onclick="cancelSelectedMission()">Отменить миссию</button>
+        </div>
+        <div class="grid" style="margin-top:12px">
+          <div class="kpi"><div class="muted">RMSE</div><div>${money(metrics.RMSE || 0)} м</div></div>
+          <div class="kpi"><div class="muted">CEP50</div><div>${money(metrics.CEP50 || 0)} м</div></div>
+          <div class="kpi"><div class="muted">Пропуски</div><div>${Math.round((metrics.gap_share || 0) * 100)}%</div></div>
+          <div class="kpi"><div class="muted">HDOP</div><div>${money(metrics.avg_hdop || 0)}</div></div>
+        </div>
+        <div style="margin-top:12px" class="muted">Дрон: ${mission.drone_id || '—'} • Заказ: ${mission.order_id || '—'}</div>
+        <div style="margin-top:12px" class="muted">Старт: ${mission.start_point.lat.toFixed(5)}, ${mission.start_point.lon.toFixed(5)}</div>
+        <div class="muted">Доставка: ${mission.delivery_point.lat.toFixed(5)}, ${mission.delivery_point.lon.toFixed(5)}</div>
+        <div class="muted">Время старта: ${formatTs(mission.started_at)}</div>
+        <div class="muted">Время завершения: ${formatTs(mission.completed_at)}</div>
+        <div class="muted">Точек фактического трека: ${actualTrack.length}</div>
+        <div class="muted">Точек сглаженного трека: ${smoothedTrack.length}</div>
+      `;
+    }
+
+    function drawSelectedDroneRoute(route){
+      if (plannedRouteLayer) map.removeLayer(plannedRouteLayer);
+      const points = (route || [])
+        .map(point => Array.isArray(point) ? point : [point.lat, point.lon])
+        .filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+      if (points.length >= 2){
+        plannedRouteLayer = L.polyline(points, { color:'#0f766e', weight:3, dashArray:'8 6' }).addTo(map);
+      } else {
+        plannedRouteLayer = null;
+      }
+    }
+
+    function drawRuntimeDrones(){
+      droneLayer.clearLayers();
+      Object.entries(liveState.drones || {}).forEach(([id, drone]) => {
+        if (!drone.pos) return;
+        const marker = L.circleMarker(drone.pos, { radius: 8, color: drone.battery <= 20 ? '#dc2626' : '#0f766e', fillOpacity: 0.85 }).addTo(droneLayer);
+        marker.bindPopup(`<strong>${id}</strong><br>Статус: ${statusLabel(drone.status)}<br>Батарея: ${Math.round(drone.battery || 0)}%`);
+        marker.on('click', () => selectDrone(id));
+      });
+    }
+
+    async function fetchMissionBundle(id, includeTracks = false){
+      const requests = [
+        fetch(`/api/missions/${id}`).then(r => r.json()),
+        fetch(`/api/missions/${id}/geozones`).then(r => r.json()),
+        fetch(`/api/missions/${id}/events`).then(r => r.json()),
+      ];
+      if (includeTracks){
+        requests.push(fetch(`/api/missions/${id}/track/raw`).then(r => r.json()));
+        requests.push(fetch(`/api/missions/${id}/track/processed`).then(r => r.json()));
+      }
+      const response = await Promise.all(requests);
+      const missionRes = response[0];
+      const geozoneRes = response[1];
+      const eventRes = response[2];
+      const rawRes = includeTracks ? response[3] : { points: selectedMissionBundle?.rawPoints || [] };
+      const processedRes = includeTracks ? response[4] : { points: selectedMissionBundle?.processedPoints || [] };
+      return {
+        mission: missionRes.mission,
+        rawPoints: rawRes.points || [],
+        processedPoints: processedRes.points || [],
+        geozones: geozoneRes.geozones || [],
+        events: eventRes.events || [],
+      };
+    }
+
+    async function refreshSelectedMission(focusMap = false, includeTracks = false){
+      if (!selectedMissionId) return;
+      try {
+        selectedMissionBundle = await fetchMissionBundle(selectedMissionId, includeTracks);
+      } catch (error){
+        document.getElementById('missionDetail').innerHTML = '<div class="muted">Не удалось загрузить миссию.</div>';
+        return;
+      }
+      const mission = selectedMissionBundle.mission;
+      drawMission(mission, selectedMissionBundle.rawPoints, selectedMissionBundle.processedPoints, selectedMissionBundle.geozones, focusMap);
+      renderEvents(selectedMissionBundle.events || []);
+      renderCommandLog(selectedMissionBundle.events || []);
+      renderZoneBox();
+      if (mission.drone_id && !selectedDroneId){
+        selectedDroneId = mission.drone_id;
+      }
+      if (mission.drone_id){
+        selectedDroneId = mission.drone_id;
+        await refreshSelectedDrone();
+      }
+      renderMissionList(latestMissionList);
+    }
+
+    async function selectMission(id){
+      selectedMissionId = id;
+      selectedDroneId = null;
+      selectedDroneBundle = null;
+      renderMissionList(latestMissionList);
+      await refreshSelectedMission(true, missionScope === 'archive');
+    }
+
+    async function runSyntheticLiveDemo(){
+      if (missionScope !== 'active'){
+        setMissionScope('active');
+      }
+      document.getElementById('mapActionStatus').textContent = 'Запускаю быструю демонстрационную миссию по Волгограду...';
+      const response = await fetch('/api/missions/synthetic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          city: 'Volgograd, Russia',
+          title: `Демо-миссия ${new Date().toLocaleTimeString('ru-RU')}`,
+          start_live: true,
+        }),
+      });
+      const data = await response.json();
+      if (!data.ok){
+        document.getElementById('mapActionStatus').textContent = data.error || 'Не удалось запустить демонстрационную миссию.';
+        return;
+      }
+      selectedMissionId = data.mission.id;
+      if (data.mission.drone_id){
+        selectedDroneId = data.mission.drone_id;
+      }
+      setMapAction(null);
+      document.getElementById('mapActionStatus').textContent = `Демо-миссия ${data.mission.code} создана и запущена.`;
+      await loadMissions();
+      await refreshSelectedMission(true);
+    }
+
+    async function updateMissionDestination(point){
+      if (!selectedMissionId){
+        document.getElementById('mapActionStatus').textContent = 'Сначала выберите миссию.';
+        return;
+      }
+      const response = await fetch(`/api/missions/${selectedMissionId}/destination`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination: { lat: point[0], lon: point[1] } })
+      });
+      const data = await response.json();
+      if (data.ok){
+        document.getElementById('mapActionStatus').textContent = `Точка доставки миссии ${data.mission.code} обновлена.`;
+        setMapAction(null);
+        await refreshSelectedMission(true);
+        await refreshSelectedDrone();
+      } else {
+        document.getElementById('mapActionStatus').textContent = data.error || 'Не удалось сменить точку доставки.';
+      }
+    }
+
+    async function cancelSelectedMission(){
+      if (!selectedMissionId){
+        document.getElementById('mapActionStatus').textContent = 'Сначала выберите миссию.';
+        return;
+      }
+      const reason = window.prompt('Укажите причину отмены миссии', 'Отмена по команде диспетчера') || '';
+      const response = await fetch(`/api/missions/${selectedMissionId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await response.json();
+      if (data.ok){
+        document.getElementById('mapActionStatus').textContent = `Миссия ${data.mission.code} отменена.`;
+        await loadRuntimeState();
+        await loadMissions();
+        selectedMissionId = null;
+        selectedDroneId = null;
+        selectedMissionBundle = null;
+        clearMissionLayers();
+        document.getElementById('missionDetail').innerHTML = '<div class="muted">Миссия отменена. История сохранена в архиве.</div>';
+      } else {
+        document.getElementById('mapActionStatus').textContent = data.error || 'Не удалось отменить миссию.';
+      }
+    }
+
+    async function addRuntimeZone(point){
+      const payload = {
+        zone_type: 'circle',
+        center_lat: point[0],
+        center_lon: point[1],
+        radius_m: Number(document.getElementById('zoneRadius').value || 250),
+        mission_id: selectedMissionId || null,
+      };
+      const response = await fetch('/api/no_fly_zones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      document.getElementById('mapActionStatus').textContent = data.ok ? 'Новая запретная зона создана, активные дроны перепрокладываются.' : (data.error || 'Не удалось создать зону.');
+      if (data.ok){
+        await refreshSelectedMission(true);
+      }
+    }
+
+    async function removeRuntimeZone(zoneId){
+      await fetch(`/api/no_fly_zones/${zoneId}`, { method: 'DELETE' });
+      document.getElementById('mapActionStatus').textContent = `Зона ${zoneId} удалена.`;
+      await refreshSelectedMission(false);
+    }
+
+    function renderEvents(events){
+      const root = document.getElementById('eventsBox');
+      if (!events.length){ root.innerHTML = '<div class="muted">Событий пока нет.</div>'; return; }
+      root.innerHTML = events.slice(0, 25).map(event => `
+        <div class="event ${event.severity}">
+          <strong>${event.title}</strong>
+          <div class="muted">${eventTypeLabel(event.event_type)} • ${formatTs(event.event_at)}</div>
+          <div>${event.message}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderCommandLog(events){
+      const root = document.getElementById('commandBox');
+      const commands = (events || []).filter(event => event.event_type === 'MISSION_UPDATED');
+      if (!commands.length){
+        root.innerHTML = '<div class="muted">Команды диспетчера пока не зафиксированы.</div>';
+        return;
+      }
+      root.innerHTML = commands.slice(0, 12).map(event => `
+        <div class="event info">
+          <strong>${event.title}</strong>
+          <div class="muted">${formatTs(event.event_at)}</div>
+          <div>${event.message}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderDroneLogs(events){
+      const root = document.getElementById('droneLogBox');
+      if (!events.length){
+        root.innerHTML = '<div class="muted">Логов по выбранному дрону пока нет.</div>';
+        return;
+      }
+      root.innerHTML = events.slice(0, 12).map(event => `
+        <div class="event ${event.severity}">
+          <strong>${event.title}</strong>
+          <div class="muted">${eventTypeLabel(event.event_type)} • ${formatTs(event.event_at)}</div>
+          <div>${event.message}</div>
+        </div>
+      `).join('');
+    }
+
+    async function refreshSelectedDrone(){
+      if (!selectedDroneId) return;
+      const data = await fetch(`/api/drones/${selectedDroneId}/monitoring`).then(r => r.json());
+      selectedDroneBundle = data;
+      const drone = data.drone;
+      const runtime = data.runtime || {};
+      const mission = data.mission || (selectedMissionBundle || {}).mission || {};
+      if (!drone){
+        document.getElementById('droneDetail').innerHTML = '<div class="muted">Нет данных по дрону.</div>';
+        document.getElementById('droneLogBox').innerHTML = '<div class="muted">Логи недоступны.</div>';
+        drawSelectedDroneRoute([]);
+        return;
+      }
+      drawSelectedDroneRoute(runtime.route || (liveState.drones[selectedDroneId] || {}).route || []);
+      document.getElementById('droneDetail').innerHTML = `
+        <div><strong>${drone.display_name}</strong></div>
+        <div class="muted">${droneTypeLabel(drone.drone_type)} • ${statusLabel(drone.status)}</div>
+        <div class="grid" style="margin-top:12px">
+          <div class="kpi"><div class="muted">Батарея</div><div>${Math.round(drone.battery_pct || 0)}%</div></div>
+          <div class="kpi"><div class="muted">Канал связи</div><div>${money((drone.meta || {}).link_quality || runtime.link_quality || 0)}</div></div>
+          <div class="kpi"><div class="muted">До прибытия</div><div>${Math.round((runtime.eta_s || 0)/60)} мин</div></div>
+          <div class="kpi"><div class="muted">Остаток</div><div>${Math.round(runtime.remaining_m || 0)} м</div></div>
+        </div>
+        <div style="margin-top:12px" class="muted">Миссия: ${mission.code || '—'}</div>
+        <div style="margin-top:12px" class="muted">Текущая позиция: ${Number(drone.current_position.lat || 0).toFixed(5)}, ${Number(drone.current_position.lon || 0).toFixed(5)}</div>
+        <div class="muted">Последнее обновление: ${formatTs(drone.last_seen_at)}</div>
+        <div class="muted">Точек истории: ${((runtime.history || []).length)}</div>
+        <div class="muted">Точек текущего маршрута: ${((runtime.route || []).length)}</div>
+        <div class="muted code">Активный заказ: ${(drone.meta || {}).active_order_id || '—'}</div>
+      `;
+      renderDroneLogs(data.events || []);
+      renderDroneList(liveState.drones || {});
+    }
+
+    async function selectDrone(id){
+      selectedDroneId = id;
+      renderDroneList(liveState.drones || {});
+      await refreshSelectedDrone();
+    }
+
+    async function loadMissions(){
+      const data = await fetch(`/api/missions?scope=${missionScope}`).then(r => r.json()).catch(() => ({ missions: [] }));
+      latestMissionList = data.missions || [];
+      if (selectedMissionId && !latestMissionList.some(mission => mission.id === selectedMissionId)){
+        selectedMissionId = null;
+        selectedMissionBundle = null;
+        clearMissionLayers();
+        document.getElementById('missionDetail').innerHTML = missionScope === 'archive'
+          ? '<div class="muted">Выберите миссию из архива.</div>'
+          : '<div class="muted">Выбранная миссия завершена или больше не активна.</div>';
+      }
+      renderMissionList(latestMissionList);
+      if (!selectedMissionId && latestMissionList.length){
+        selectedMissionId = latestMissionList[0].id;
+        await refreshSelectedMission(true, missionScope === 'archive');
+      }
+    }
+
+    function applyRuntimeState(data){
+      liveState = {
+        drones: data.drones || {},
+        stations: data.stations || [],
+        no_fly_zones: data.no_fly_zones || [],
+        station_states: data.station_states || [],
+        histories: data.histories || {},
+      };
+      renderDroneList(liveState.drones || {});
+      drawStations();
+      renderStationBox();
+      drawRuntimeZones();
+      renderZoneBox();
+      drawRuntimeDrones();
+      Object.entries(liveState.drones || {}).forEach(([droneId, drone]) => {
+        if ((drone.status === 'emergency_landed' || Math.round(drone.battery || 0) <= 0) && !emergencyAlerts.has(droneId)){
+          emergencyAlerts.add(droneId);
+          window.alert(`Дрон ${droneId} выполнил аварийную посадку из-за полного разряда.`);
+        }
+      });
+      if (selectedDroneId){
+        const runtimeDrone = (liveState.drones || {})[selectedDroneId] || {};
+        drawSelectedDroneRoute(runtimeDrone.route || []);
+      }
+      if (selectedMissionBundle?.mission){
+        drawMission(
+          selectedMissionBundle.mission,
+          selectedMissionBundle.rawPoints || [],
+          selectedMissionBundle.processedPoints || [],
+          selectedMissionBundle.geozones || [],
+          false,
+        );
+      }
+    }
+
+    async function loadRuntimeState(){
+      try {
+        const data = await fetch('/api/state').then(r => r.json());
+        applyRuntimeState(data);
+      } catch (error) {
+      }
+    }
+
+    function connectWS(){
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+      ws.onopen = () => ws.send('monitor-ready');
+      ws.onmessage = ev => {
+        applyRuntimeState(JSON.parse(ev.data));
+      };
+      ws.onclose = () => setTimeout(connectWS, 1500);
+    }
+
+    map.on('click', async (e) => {
+      const point = [e.latlng.lat, e.latlng.lng];
+      if (mapAction === 'destination'){
+        await updateMissionDestination(point);
+      } else if (mapAction === 'zone'){
+        await addRuntimeZone(point);
+      }
+    });
+
+    connectWS();
+    loadRuntimeState();
+    loadMissions();
+    setInterval(loadRuntimeState, 10000);
+    setInterval(loadMissions, 12000);
+    setInterval(() => refreshSelectedMission(false, missionScope === 'archive'), 10000);
+    setInterval(() => refreshSelectedDrone(), 8000);
+  </script>
+</body>
+</html>
