@@ -33,10 +33,12 @@ VOLGOGRAD_DEMO_POINTS = [
 
 class MissionMonitoringService:
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
+        """Инициализирует."""
         self.db_path = db_path
         self._bootstrapped = False
 
     def init_db(self) -> None:
+        """Создает таблицы базы данных мониторинга, если они еще не были созданы."""
         init_db(self.db_path)
         with session(self.db_path) as conn:
             conn.execute(
@@ -49,24 +51,29 @@ class MissionMonitoringService:
         self._bootstrapped = True
 
     def _ensure_ready(self) -> None:
+        """Проверяет, что сервис мониторинга готов к работе."""
         if not self._bootstrapped:
             self.init_db()
 
     @staticmethod
     def _new_id(prefix: str) -> str:
+        """Формирует новый уникальный идентификатор с заданным префиксом."""
         return f"{prefix}_{uuid4().hex[:12]}"
 
     @staticmethod
     def _mission_code() -> str:
+        """Формирует человекочитаемый код миссии."""
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         return f"MSN-{stamp}-{uuid4().hex[:4].upper()}"
 
     @staticmethod
     def _json(data: Any) -> str:
+        """Сериализует данные в JSON-строку."""
         return json.dumps(data, ensure_ascii=False)
 
     @staticmethod
     def _loads(raw: str | None, default: Any) -> Any:
+        """Десериализует JSON-строку или возвращает значение по умолчанию."""
         if not raw:
             return default
         try:
@@ -76,12 +83,14 @@ class MissionMonitoringService:
 
     @staticmethod
     def _point_from_meters(origin: Tuple[float, float], dx_m: float, dy_m: float) -> Tuple[float, float]:
+        """Смещение в метрах преобразует в географическую точку."""
         lat = origin[0] + dy_m / 111320.0
         lon = origin[1] + dx_m / max(1e-6, 111320.0 * math.cos(math.radians((origin[0] + lat) / 2.0)))
         return round(lat, 7), round(lon, 7)
 
     @staticmethod
     def _zone_contains(zone: Dict[str, Any], point: Tuple[float, float] | None) -> bool:
+        """Проверяет, находится ли точка внутри геозоны."""
         if point is None:
             return False
         center_lat = zone.get("center_lat")
@@ -93,6 +102,7 @@ class MissionMonitoringService:
 
     @staticmethod
     def _build_demo_layout(rng: random.Random) -> Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], float]:
+        """Строит демонстрационный сценарий расположение."""
         start = rng.choice(VOLGOGRAD_DEMO_POINTS)
         candidates = [point for point in VOLGOGRAD_DEMO_POINTS if haversine_m(start, point) >= 700.0]
         delivery = rng.choice(candidates or VOLGOGRAD_DEMO_POINTS)
@@ -116,6 +126,7 @@ class MissionMonitoringService:
         event_at: Optional[str] = None,
         meta: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """Добавляет событие миссии в журнал."""
         conn.execute(
             """
             INSERT INTO mission_events (mission_id, drone_id, event_type, severity, title, message, event_at, meta_json)
@@ -134,6 +145,7 @@ class MissionMonitoringService:
         )
 
     def _next_seq(self, conn: sqlite3.Connection, mission_id: str) -> int:
+        """Возвращает следующий порядковый номер точки трека."""
         row = conn.execute(
             "SELECT COALESCE(MAX(seq_no), 0) AS seq FROM track_points_raw WHERE mission_id = ?",
             (mission_id,),
@@ -141,12 +153,14 @@ class MissionMonitoringService:
         return int(row["seq"]) + 1
 
     def _get_mission_base(self, mission_id: str, conn: sqlite3.Connection) -> Dict[str, Any]:
+        """Получает базовую запись миссии из базы данных."""
         row = conn.execute("SELECT * FROM missions WHERE id = ?", (mission_id,)).fetchone()
         if row is None:
             raise KeyError(f"Mission {mission_id} not found")
         return dict(row)
 
     def _serialize_drone(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Сериализует дрон."""
         return {
             "id": row["id"],
             "code": row["code"],
@@ -161,6 +175,7 @@ class MissionMonitoringService:
         }
 
     def _mission_payload(self, conn: sqlite3.Connection, mission_row: Dict[str, Any]) -> Dict[str, Any]:
+        """Формирует полный ответ API по миссии."""
         geozones = self.get_geozones(mission_row["id"], conn=conn)
         latest_metrics = self.get_metrics(mission_row["id"], conn=conn)
         raw_count = conn.execute(
@@ -221,6 +236,7 @@ class MissionMonitoringService:
         no_fly_zones: Optional[List[Dict[str, Any]]] = None,
         drone_type: str = "cargo",
     ) -> Dict[str, Any]:
+        """Создает черновик live-миссии."""
         self._ensure_ready()
         mission_id = self._new_id("mission")
         now = utc_now_iso()
@@ -309,6 +325,7 @@ class MissionMonitoringService:
         drone_id: Optional[str],
         points: List[Dict[str, Any]],
     ) -> None:
+        """Заменяет сохраненный сырой трек миссии новым набором точек."""
         conn.execute("DELETE FROM track_points_raw WHERE mission_id = ?", (mission_id,))
         for point in points:
             conn.execute(
@@ -344,6 +361,7 @@ class MissionMonitoringService:
         city: str = "Volgograd, Russia",
         seed: Optional[int] = None,
     ) -> Dict[str, Any]:
+        """Создает синтетическую миссию."""
         self._ensure_ready()
         rng = random.Random(seed)
         start, delivery, no_fly, radius_m = self._build_demo_layout(rng)
@@ -430,6 +448,7 @@ class MissionMonitoringService:
         seed: Optional[int] = None,
         drone_type: str = "cargo",
     ) -> Dict[str, Any]:
+        """Создает демонстрационную live-миссию."""
         self._ensure_ready()
         rng = random.Random(seed)
         start, delivery, no_fly, radius_m = self._build_demo_layout(rng)
@@ -445,6 +464,7 @@ class MissionMonitoringService:
         )
 
     def register_live_order(self, mission_id: str, internal_order_id: str, payload: Optional[Dict[str, Any]] = None) -> None:
+        """Регистрирует live-заказ."""
         self._ensure_ready()
         now = utc_now_iso()
         with session(self.db_path) as conn:
@@ -471,6 +491,7 @@ class MissionMonitoringService:
             )
 
     def bind_assignment(self, order_id: str, drone_id: str, runtime_drone: Optional[Dict[str, Any]] = None) -> None:
+        """Связывает назначение."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             row = conn.execute(
@@ -498,6 +519,7 @@ class MissionMonitoringService:
             self.upsert_drone_snapshot(drone_id, runtime_drone)
 
     def _upsert_drone_snapshot_conn(self, conn: sqlite3.Connection, drone_id: str, runtime_drone: Dict[str, Any]) -> None:
+        """Создает или обновляет снимок состояния дрона внутри текущего соединения с БД."""
         now = utc_now_iso()
         pos = tuple(runtime_drone.get("pos") or (None, None))
         conn.execute(
@@ -546,11 +568,13 @@ class MissionMonitoringService:
         )
 
     def upsert_drone_snapshot(self, drone_id: str, runtime_drone: Dict[str, Any]) -> None:
+        """Создает или обновляет снимок состояния дрона."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             self._upsert_drone_snapshot_conn(conn, drone_id, runtime_drone)
 
     def record_live_telemetry(self, drone_id: str, runtime_drone: Dict[str, Any]) -> None:
+        """Записывает live-телеметрию дрона в базу мониторинга."""
         self._ensure_ready()
         active_order_id = runtime_drone.get("active_order_id")
         pos = runtime_drone.get("pos")
@@ -732,6 +756,7 @@ class MissionMonitoringService:
                         )
 
     def complete_live_mission_for_order(self, order_id: str, runtime_drone: Optional[Dict[str, Any]] = None) -> None:
+        """Завершает live-миссию по связанному заказу."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             row = conn.execute(
@@ -762,6 +787,7 @@ class MissionMonitoringService:
             )
 
     def fail_live_mission_for_order(self, order_id: str, runtime_drone: Optional[Dict[str, Any]] = None, reason: str = "unknown") -> None:
+        """Помечает live-миссию как неуспешную по связанному заказу."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             row = conn.execute(
@@ -800,6 +826,7 @@ class MissionMonitoringService:
             )
 
     def list_missions(self, scope: str = "active") -> List[Dict[str, Any]]:
+        """Возвращает список миссий."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             scope_value = (scope or "active").strip().lower()
@@ -824,12 +851,14 @@ class MissionMonitoringService:
             return [self._mission_payload(conn, dict(row)) for row in rows]
 
     def get_mission(self, mission_id: str) -> Dict[str, Any]:
+        """Получает миссию."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             mission_row = self._get_mission_base(mission_id, conn)
             return self._mission_payload(conn, mission_row)
 
     def get_raw_track(self, mission_id: str) -> Dict[str, Any]:
+        """Получает сырой трек миссии."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             rows = conn.execute(
@@ -844,6 +873,7 @@ class MissionMonitoringService:
             return {"mission_id": mission_id, "points": points}
 
     def get_geozones(self, mission_id: str, conn: Optional[sqlite3.Connection] = None) -> List[Dict[str, Any]]:
+        """Получает геозоны миссии."""
         self._ensure_ready()
         close_conn = False
         if conn is None:
@@ -867,6 +897,7 @@ class MissionMonitoringService:
                 conn.close()
 
     def get_events(self, mission_id: str) -> Dict[str, Any]:
+        """Получает события."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             rows = conn.execute(
@@ -881,6 +912,7 @@ class MissionMonitoringService:
             return {"mission_id": mission_id, "events": events}
 
     def get_latest_processing_run_id(self, conn: sqlite3.Connection, mission_id: str) -> Optional[str]:
+        """Получает идентификатор последнего запуска обработки трека."""
         row = conn.execute(
             """
             SELECT id FROM processing_runs
@@ -893,6 +925,7 @@ class MissionMonitoringService:
         return row["id"] if row is not None else None
 
     def get_processed_track(self, mission_id: str) -> Dict[str, Any]:
+        """Получает обработанный трек."""
         self._ensure_ready()
         self.ensure_processed_track(mission_id)
         with session(self.db_path) as conn:
@@ -916,6 +949,7 @@ class MissionMonitoringService:
             return {"mission_id": mission_id, "processing_run_id": run_id, "points": points}
 
     def ensure_processed_track(self, mission_id: str) -> None:
+        """Проверяет и подготавливает обработанный трек."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             existing = conn.execute(
@@ -930,6 +964,7 @@ class MissionMonitoringService:
             self.run_processing(mission_id, {"algorithm": "kalman_basic"})
 
     def run_processing(self, mission_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Запускает обработку."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             raw_rows = conn.execute(
@@ -1034,6 +1069,7 @@ class MissionMonitoringService:
             }
 
     def get_metrics(self, mission_id: str, conn: Optional[sqlite3.Connection] = None) -> Dict[str, Any]:
+        """Получает метрики."""
         self._ensure_ready()
         close_conn = False
         if conn is None:
@@ -1063,6 +1099,7 @@ class MissionMonitoringService:
                 conn.close()
 
     def get_drone_monitoring(self, drone_id: str, runtime_drone: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Получает данные мониторинга выбранного дрона."""
         self._ensure_ready()
         if runtime_drone is not None:
             self.upsert_drone_snapshot(drone_id, runtime_drone)
@@ -1110,6 +1147,7 @@ class MissionMonitoringService:
             return payload
 
     def cancel_mission(self, mission_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
+        """Отменяет миссию."""
         self._ensure_ready()
         now = utc_now_iso()
         with session(self.db_path) as conn:
@@ -1142,6 +1180,7 @@ class MissionMonitoringService:
             return self._mission_payload(conn, self._get_mission_base(mission_id, conn))
 
     def update_mission_destination(self, mission_id: str, destination: Tuple[float, float]) -> Dict[str, Any]:
+        """Обновляет точку доставки миссии."""
         self._ensure_ready()
         now = utc_now_iso()
         with session(self.db_path) as conn:
@@ -1175,6 +1214,7 @@ class MissionMonitoringService:
             return self._mission_payload(conn, self._get_mission_base(mission_id, conn))
 
     def reconcile_runtime_assignments(self, active_order_ids: set[str]) -> int:
+        """Синхронизирует runtime-состояние назначения."""
         self._ensure_ready()
         now = utc_now_iso()
         with session(self.db_path) as conn:
@@ -1217,6 +1257,7 @@ class MissionMonitoringService:
         radius_m: float,
         name: Optional[str] = None,
     ) -> Dict[str, Any]:
+        """Создает или обновляет запретную зону миссии."""
         self._ensure_ready()
         now = utc_now_iso()
         with session(self.db_path) as conn:
@@ -1273,6 +1314,7 @@ class MissionMonitoringService:
             return self._mission_payload(conn, self._get_mission_base(mission_id, conn))
 
     def remove_mission_zone(self, zone_id: str) -> Optional[str]:
+        """Удаляет геозону миссии."""
         self._ensure_ready()
         with session(self.db_path) as conn:
             row = conn.execute(

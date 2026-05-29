@@ -6,18 +6,22 @@ import logging
 
 class GraphService:
     def __init__(self):
+        """Инициализирует."""
         self.graphs = {}
         self.progress_callbacks = []
         self.logger = logging.getLogger(__name__)
     
     def add_progress_callback(self, callback):
+        """Добавляет обработчик прогресса."""
         self.progress_callbacks.append(callback)
     
     def _update_progress(self, stage, percentage, message=""):
+        """Обновляет прогресс."""
         for callback in self.progress_callbacks:
             callback(stage, percentage, message)
     
     def build_city_graph(self, city_data, drone_type="cargo"):
+        """Строит город граф."""
         self._update_progress("graph", 0, "Построение графа для " + drone_type)
         
         try:
@@ -57,6 +61,7 @@ class GraphService:
             raise
     
     def _get_drone_params(self, drone_type):
+        """Получает параметры дрона выбранного типа."""
         params = {
             "cargo": {"weight": 2.0, "max_altitude": 200, "battery_range": 20000},
             "operator": {"weight": 1.5, "max_altitude": 150, "battery_range": 15000},
@@ -65,6 +70,7 @@ class GraphService:
         return params.get(drone_type, params["cargo"])
     
     def _convert_ox_graph_to_nx(self, ox_graph):
+        """Преобразует граф OSMnx в граф NetworkX."""
         G = nx.Graph()
         
         # Добавляем узлы
@@ -167,6 +173,7 @@ class GraphService:
             self.logger.warning(f"Ошибка добавления критических точек: {e}")
     
     def _add_no_fly_zones(self, G, no_fly_zones):
+        """Добавляет запретные зоны."""
         for zone in no_fly_zones:
             # Mark nodes inside zone
             for node, attr in list(G.nodes(data=True)):
@@ -190,6 +197,7 @@ class GraphService:
     
     def _point_in_no_fly_zone(self, point, zone):
         # Support rectangular and circular runtime zones.
+        """Обрабатывает точку в запретную зону."""
         try:
             lat, lon = point
             zone_type = (zone.get('zone_type') or 'rectangle').lower()
@@ -218,7 +226,7 @@ class GraphService:
             return False
 
     def _segment_intersects_zone(self, a, b, zone):
-        """Check if line segment a->b intersects rectangle or circle no-fly zone."""
+        """Проверяет, пересекает ли отрезок прямоугольную или круговую запретную зону."""
         try:
             zone_type = (zone.get('zone_type') or 'rectangle').lower()
             if zone_type == 'circle':
@@ -265,9 +273,11 @@ class GraphService:
             ]
 
             def ccw(p1, p2, p3):
+                """Проверяет ориентацию трех точек для теста пересечения отрезков."""
                 return (p3[1]-p1[1]) * (p2[0]-p1[0]) > (p2[1]-p1[1]) * (p3[0]-p1[0])
 
             def segments_intersect(p1, p2, p3, p4):
+                """Проверяет пересечение двух отрезков."""
                 return ccw(p1, p3, p4) != ccw(p2, p3, p4) and ccw(p1, p2, p3) != ccw(p1, p2, p4)
 
             p1 = (ax, ay)

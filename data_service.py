@@ -13,6 +13,7 @@ from redis import Redis
 
 class DataService:
     def __init__(self, cache_dir="cache_data"):
+        """Инициализирует."""
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
         self.progress_callbacks = []
@@ -39,9 +40,11 @@ class DataService:
             self.logger.warning("Redis not available for DataService cache; falling back to disk")
     
     def add_progress_callback(self, callback):
+        """Добавляет обработчик прогресса."""
         self.progress_callbacks.append(callback)
     
     def _update_progress(self, stage, percentage, message=""):
+        """Обновляет прогресс."""
         for callback in self.progress_callbacks:
             callback(stage, percentage, message)
     
@@ -72,6 +75,7 @@ class DataService:
         return self._download_city_data(normalized_name, cache_file, redis_key)
     
     def _download_city_data(self, city_name, cache_file, redis_key: str | None = None):
+        """Загружает и кэширует геоданные города."""
         self._update_progress("download", 0, "Начало загрузки данных")
         
         try:
@@ -133,6 +137,7 @@ class DataService:
             raise
     
     def _get_no_fly_zones(self, city_name):
+        """Получает запретные зоны."""
         return []  # Заглушка - можно добавить реальные данные
     
     def address_to_coords(self, address, city_name=None):
@@ -249,6 +254,7 @@ class DataService:
         return True
     
     def _load_from_cache(self, cache_file):
+        """Загружает данные из кэша."""
         try:
             with open(cache_file, 'rb') as f:
                 return pickle.load(f)
@@ -262,6 +268,7 @@ class DataService:
         return city_name.strip()
     
     def _sanitize_name(self, name):
+        """Очищает имя для безопасного использования в имени файла."""
         import re
         name = re.sub(r'[^\w\s-]', '', name)
         return re.sub(r'[-\s]+', '_', name).strip('_')[:100]

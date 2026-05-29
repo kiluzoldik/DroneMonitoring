@@ -53,7 +53,8 @@ CHARGE_TICKS_ESTIMATE_PER_STOP = 20
 CHARGE_COMPLETE_PCT = 99.0
 # Скорость по умолчанию для оценки ETA (м/с), если ветер неизвестен
 DEFAULT_SPEED_MPS = 12.0
-SIMULATION_SPEED_MULTIPLIER = 2.0
+# Текущая демонстрационная скорость увеличена в 2.5 раза относительно прежнего множителя 2.0.
+SIMULATION_SPEED_MULTIPLIER = 5.0
 AIR_ROUTE_STEP_M = 140.0
 AIR_ZONE_PADDING_M = 35.0
 EMERGENCY_LANDING_BATTERY_PCT = 0.5
@@ -88,6 +89,7 @@ FAVICON_PNG = base64.b64decode(
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
+	"""Возвращает минимальную иконку сайта, чтобы браузер не получал ошибку 404."""
 	return Response(content=FAVICON_PNG, media_type="image/png")
 
 # Services
@@ -171,6 +173,7 @@ DEMO_STATIONS = [
 
 
 def _available_graph_view(G) -> nx.Graph:
+	"""Выполняет служебную операцию: доступный граф представление."""
 	view = nx.Graph()
 	if G is None:
 		return view
@@ -194,6 +197,7 @@ def _available_graph_view(G) -> nx.Graph:
 
 
 def _nearest_node_from_candidates(G, point: Tuple[float, float], candidates: List[Any]) -> Optional[Any]:
+	"""Находит ближайшую узел из candidates."""
 	if G is None or not point or len(point) != 2 or not candidates:
 		return None
 	best_node = None
@@ -217,6 +221,7 @@ def _nearest_node_from_candidates(G, point: Tuple[float, float], candidates: Lis
 
 
 def _refresh_primary_component_nodes() -> None:
+	"""Обновляет основной компонент узлы."""
 	G = STATE.get("city_graph")
 	if G is None or len(G.nodes) == 0:
 		STATE["primary_component_nodes"] = set()
@@ -243,6 +248,7 @@ def _refresh_primary_component_nodes() -> None:
 
 
 def _find_graph_node_for_point(point: Tuple[float, float], prefer_primary: bool = True) -> Optional[Any]:
+	"""Ищет узел графа, соответствующий заданной точке."""
 	G = STATE.get("city_graph")
 	if G is None or not point or len(point) != 2:
 		return None
@@ -255,6 +261,7 @@ def _find_graph_node_for_point(point: Tuple[float, float], prefer_primary: bool 
 
 
 def _generate_city_stations(count: int = MIN_CITY_STATION_COUNT) -> List[Tuple[float, float]]:
+	"""Выполняет служебную операцию: generate город станции."""
 	G = STATE.get("city_graph")
 	primary_nodes = list(STATE.get("primary_component_nodes") or [])
 	if G is None or len(primary_nodes) < 5:
@@ -313,6 +320,7 @@ def _generate_city_stations(count: int = MIN_CITY_STATION_COUNT) -> List[Tuple[f
 
 
 def _normalize_runtime_zone_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+	"""Нормализует runtime-состояние зону данные ответа."""
 	zone = dict(payload or {})
 	zone_type = (zone.get("zone_type") or "").strip().lower()
 	if not zone_type:
@@ -345,6 +353,7 @@ def _normalize_runtime_zone_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _zone_center(zone: Dict[str, Any]) -> Tuple[float, float]:
+	"""Выполняет служебную операцию: зону центр."""
 	if zone.get("zone_type") == "circle":
 		return (float(zone.get("center_lat")), float(zone.get("center_lon")))
 	lat_min = float(zone.get("lat_min"))
@@ -355,6 +364,7 @@ def _zone_center(zone: Dict[str, Any]) -> Tuple[float, float]:
 
 
 def _snap_point_to_graph(point: Tuple[float, float]) -> Tuple[float, float]:
+	"""Привязывает точку к ближайшему узлу графа."""
 	G = STATE.get("city_graph")
 	if G is None or not point or len(point) != 2:
 		return tuple(point)
@@ -371,6 +381,7 @@ def _snap_point_to_graph(point: Tuple[float, float]) -> Tuple[float, float]:
 
 
 async def _ensure_demo_environment(city: str = DEMO_CITY):
+	"""Проверяет и подготавливает демонстрационный сценарий демосреду."""
 	target_city = city or DEMO_CITY
 	if STATE.get("city_graph") is None or STATE.get("city") != target_city:
 		city_data = _data_service.get_city_data(target_city)
@@ -410,6 +421,7 @@ async def _enqueue_live_order(
 	start_override: Optional[Tuple[float, float]] = None,
 	end_override: Optional[Tuple[float, float]] = None,
 ) -> str:
+	"""Выполняет служебную операцию: enqueue live-заказ."""
 	order_id = f"ord_{len(STATE['orders'])+1}"
 	start = mission.get("start_point") or {}
 	end = mission.get("delivery_point") or {}
@@ -434,6 +446,7 @@ async def _enqueue_live_order(
 
 
 async def _upsert_runtime_no_fly_zone(zone_payload: Dict[str, Any]) -> str:
+	"""Создает или обновляет runtime-состояние запретную зону."""
 	zone = _normalize_runtime_zone_payload(zone_payload)
 	if zone.get("mission_id") and zone.get("zone_type") == "circle":
 		_monitoring_service.upsert_mission_no_fly_zone(
@@ -459,6 +472,7 @@ async def _upsert_runtime_no_fly_zone(zone_payload: Dict[str, Any]) -> str:
 
 
 async def _update_runtime_destination(mission: Dict[str, Any], destination: Tuple[float, float]):
+	"""Обновляет runtime-состояние точку доставки."""
 	order_id = mission.get("order_id")
 	if not order_id:
 		for order in STATE.get("orders", []):
@@ -471,6 +485,7 @@ async def _update_runtime_destination(mission: Dict[str, Any], destination: Tupl
 
 
 async def _remove_runtime_zones_for_mission(mission_id: str) -> int:
+	"""Удаляет runtime-зоны, связанные с миссией."""
 	before = len(STATE["no_fly_zones"])
 	STATE["no_fly_zones"] = [zone for zone in STATE.get("no_fly_zones", []) if zone.get("mission_id") != mission_id]
 	removed = before - len(STATE["no_fly_zones"])
@@ -482,6 +497,7 @@ async def _remove_runtime_zones_for_mission(mission_id: str) -> int:
 
 
 async def _cancel_runtime_order(order_id: str) -> Optional[Dict[str, Any]]:
+	"""Отменяет runtime-состояние заказ."""
 	for order in STATE.get("orders", []):
 		if order.get("id") != order_id:
 			continue
@@ -519,6 +535,7 @@ async def _cancel_runtime_order(order_id: str) -> Optional[Dict[str, Any]]:
 
 
 async def _cancel_runtime_mission(mission_id: str) -> Optional[Dict[str, Any]]:
+	"""Отменяет runtime-состояние миссию."""
 	cancelled_order = None
 	for order in STATE.get("orders", []):
 		if order.get("mission_id") == mission_id and order.get("status") not in ("completed", "cancelled"):
@@ -546,6 +563,7 @@ register_monitoring_routes(
 # Helpers
 # Краткое описание погоды по коду WMO (Open-Meteo)
 def _weather_code_to_desc(code: int) -> str:
+	"""Преобразует код погоды в текстовое описание."""
 	codes = {
 		0: "Ясно", 1: "Преим. ясно", 2: "Переменная облачность", 3: "Пасмурно",
 		45: "Туман", 48: "Изморозь", 51: "Морось", 53: "Морось", 55: "Морось",
@@ -586,6 +604,7 @@ def _fetch_weather_sync(lat: float, lon: float) -> Optional[Dict[str, Any]]:
 
 
 async def fetch_weather_from_api(lat: float, lon: float) -> Optional[Dict[str, Any]]:
+	"""Запрашивает погоду из api."""
 	return await asyncio.to_thread(_fetch_weather_sync, lat, lon)
 
 
@@ -607,6 +626,7 @@ def _station_states_for_ui() -> List[Dict[str, Any]]:
 
 
 def _public_order_snapshot(order: Dict[str, Any]) -> Dict[str, Any]:
+	"""Формирует публичный снимок состояния заказа."""
 	snapshot = dict(order or {})
 	snapshot.pop("segments", None)
 	snapshot.pop("battery_plan", None)
@@ -614,12 +634,14 @@ def _public_order_snapshot(order: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _public_drone_snapshot(drone: Dict[str, Any]) -> Dict[str, Any]:
+	"""Формирует публичный снимок состояния дрона."""
 	snapshot = dict(drone or {})
 	snapshot.pop("history", None)
 	return snapshot
 
 
 def _public_histories() -> Dict[str, List[Tuple[float, float]]]:
+	"""Формирует публичное представление истории."""
 	result: Dict[str, List[Tuple[float, float]]] = {}
 	for drone_id, drone in (STATE.get("drones") or {}).items():
 		history = list(drone.get("history") or [])
@@ -628,6 +650,7 @@ def _public_histories() -> Dict[str, List[Tuple[float, float]]]:
 
 
 def _public_state_payload() -> Dict[str, Any]:
+	"""Формирует публичное представление состояние данные ответа."""
 	return {
 		"city": STATE["city"],
 		"orders": [_public_order_snapshot(order) for order in STATE.get("orders", [])],
@@ -642,6 +665,7 @@ def _public_state_payload() -> Dict[str, Any]:
 
 
 def _queue_live_telemetry(drone_id: str, drone: Dict[str, Any]) -> None:
+	"""Ставит в очередь live-телеметрию."""
 	global LIVE_TELEMETRY_QUEUE, LIVE_TELEMETRY_LAST_SENT
 	queue = LIVE_TELEMETRY_QUEUE
 	if queue is None:
@@ -680,6 +704,7 @@ def _queue_live_telemetry(drone_id: str, drone: Dict[str, Any]) -> None:
 
 
 async def telemetry_writer_loop():
+	"""Фоново забирает live-телеметрию из очереди и сохраняет ее в базу данных мониторинга."""
 	global LIVE_TELEMETRY_QUEUE
 	while True:
 		queue = LIVE_TELEMETRY_QUEUE
@@ -696,6 +721,7 @@ async def telemetry_writer_loop():
 
 
 async def broadcast_state():
+	"""Отправляет всем WebSocket-клиентам актуальный снимок состояния симуляции."""
 	payload = _public_state_payload()
 	dead: List[WebSocket] = []
 	for ws in list(STATE["clients"]):
@@ -707,12 +733,14 @@ async def broadcast_state():
 		STATE["clients"].discard(ws)
 
 async def broadcaster_loop():
+	"""Периодически запускает рассылку состояния активным клиентам интерфейса."""
 	while True:
 		await broadcast_state()
 		await asyncio.sleep(1.0)
 
 async def scheduler_loop():
 	# very simple loop: assign queued orders, move drones, reroute on zones
+	"""Выполняет основной цикл симуляции: двигает дроны, назначает заказы и обновляет зарядку."""
 	while True:
 		try:
 			simulate_step()
@@ -728,6 +756,7 @@ async def scheduler_loop():
 
 @app.on_event("startup")
 async def on_startup():
+	"""Готовит сервисы при запуске FastAPI-приложения и поднимает фоновые задачи."""
 	global LIVE_TELEMETRY_QUEUE
 	_monitoring_service.init_db()
 	LIVE_TELEMETRY_QUEUE = asyncio.Queue(maxsize=LIVE_TELEMETRY_QUEUE_MAX)
@@ -765,6 +794,7 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+	"""Останавливает фоновые задачи и сохраняет runtime-состояние перед завершением сервера."""
 	if LIVE_TELEMETRY_QUEUE is not None:
 		await LIVE_TELEMETRY_QUEUE.join()
 	await persist_state()
@@ -772,6 +802,7 @@ async def on_shutdown():
 # API endpoints
 @app.post("/api/load_city")
 async def load_city(body: LoadCityRequest):
+	"""Загружает город."""
 	try:
 		city_data = _data_service.get_city_data(body.city)
 		# inject current API no-fly zones into data prior to build
@@ -800,6 +831,7 @@ async def load_city(body: LoadCityRequest):
 
 @app.get("/api/state")
 async def get_state():
+	"""Получает состояние."""
 	payload = _public_state_payload()
 	payload.update({
 		"orders_count": len(STATE["orders"]),
@@ -811,6 +843,7 @@ async def get_state():
 
 @app.post("/api/reverse")
 async def reverse_geocode(body: Dict[str, float]):
+	"""Выполняет обратное геокодирование координат."""
 	lat = body.get("lat") ; lon = body.get("lon")
 	if lat is None or lon is None:
 		return JSONResponse(status_code=400, content={"ok": False, "error": "lat/lon required"})
@@ -819,6 +852,7 @@ async def reverse_geocode(body: Dict[str, float]):
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
+	"""Обслуживает WebSocket-подключение клиента."""
 	await ws.accept()
 	STATE["clients"].add(ws)
 	try:
@@ -832,16 +866,19 @@ async def ws_endpoint(ws: WebSocket):
 
 @app.post("/api/no_fly_zones")
 async def add_no_fly_zone(zone: NoFlyZone):
+	"""Добавляет запретную зону."""
 	z = zone.model_dump()
 	await _upsert_runtime_no_fly_zone(z)
 	return {"ok": True, "zone": _normalize_runtime_zone_payload(z)}
 
 @app.get("/api/no_fly_zones")
 async def list_no_fly_zones():
+	"""Возвращает список запретные зоны."""
 	return STATE["no_fly_zones"]
 
 @app.delete("/api/no_fly_zones/{zone_id}")
 async def remove_no_fly_zone(zone_id: str):
+	"""Удаляет запретную зону."""
 	zone_to_remove = next((z for z in STATE["no_fly_zones"] if z.get("id") == zone_id), None)
 	before = len(STATE["no_fly_zones"])
 	STATE["no_fly_zones"] = [z for z in STATE["no_fly_zones"] if z.get("id") != zone_id]
@@ -856,6 +893,7 @@ async def remove_no_fly_zone(zone_id: str):
 	return {"ok": True, "removed": removed }
 
 def _centroid(points: List[Tuple[float, float]]) -> Tuple[float, float]:
+	"""Вычисляет центр набора точек."""
 	if not points:
 		return (0.0, 0.0)
 	n = len(points)
@@ -865,6 +903,7 @@ def _centroid(points: List[Tuple[float, float]]) -> Tuple[float, float]:
 @app.post("/api/orders")
 async def add_order(order: AddOrderRequest):
 	# Classify order type
+	"""Добавляет заказ."""
 	order_type = classify_order(order)
 	req_drone_type = (order.drone_type or "").strip().lower() or map_order_to_drone_type(order_type)
 	if req_drone_type not in ("cargo", "operator", "cleaner"):
@@ -906,10 +945,12 @@ async def add_order(order: AddOrderRequest):
 
 @app.get("/api/orders")
 async def list_orders():
+	"""Возвращает список заказы."""
 	return STATE["orders"]
 
 @app.post("/api/orders/{order_id}/cancel")
 async def cancel_order(order_id: str):
+    """Отменяет заказ."""
     order = await _cancel_runtime_order(order_id)
     if order is not None:
         return {"ok": True, "order": order}
@@ -921,6 +962,7 @@ class UpdateOrderRequest(BaseModel):
 
 
 async def _apply_order_destination_update(order_id: str, new_end: Tuple[float, float]):
+	"""Применяет изменение точки доставки к заказу."""
 	for o in STATE["orders"]:
 		if o.get("id") == order_id:
 			o["end"] = tuple(new_end)
@@ -945,6 +987,7 @@ async def _apply_order_destination_update(order_id: str, new_end: Tuple[float, f
 
 @app.post("/api/orders/{order_id}/update_destination")
 async def update_order_destination(order_id: str, body: UpdateOrderRequest):
+    """Обновляет заказ точку доставки."""
     new_end = await resolve_point(body.new_coords_to, body.new_address_to)
     if not new_end:
         return JSONResponse(status_code=400, content={"ok": False, "error": "Invalid destination"})
@@ -952,6 +995,7 @@ async def update_order_destination(order_id: str, body: UpdateOrderRequest):
 
 @app.get("/")
 async def root_page():
+	"""Возвращает главную HTML-страницу приложения."""
 	try:
 		with open("static/index.html", "r", encoding="utf-8") as f:
 			return HTMLResponse(f.read())
@@ -960,6 +1004,7 @@ async def root_page():
 
 @app.post("/api/weather")
 async def set_weather(w: Dict[str, Any]):
+	"""Устанавливает погоду."""
 	wind = float(w.get("wind_mps", 3.0))
 	STATE["weather"] = {
 		"wind_mps": max(0.0, min(40.0, wind)),
@@ -1031,6 +1076,7 @@ class BaseConfig(BaseModel):
 
 @app.post("/api/base")
 async def set_base(cfg: BaseConfig):
+    """Устанавливает базу."""
     if cfg.base:
         STATE["base"] = tuple(cfg.base)
         # Update weather by base coordinates (best effort).
@@ -1057,6 +1103,7 @@ async def set_base(cfg: BaseConfig):
 
 @app.get("/api/base")
 async def get_base():
+    """Получает базу."""
     return {"base": STATE["base"], "inventory": STATE["inventory"], "stations": STATE["stations"]}
 
 class StationsConfig(BaseModel):
@@ -1065,6 +1112,7 @@ class StationsConfig(BaseModel):
 
 @app.post("/api/stations")
 async def set_stations(cfg: StationsConfig):
+    """Устанавливает станции."""
     try:
         stations = []
         for s in cfg.stations:
@@ -1087,7 +1135,7 @@ async def set_stations(cfg: StationsConfig):
         return JSONResponse(status_code=400, content={"ok": False, "error": str(e)})
 
 def refresh_charger_nodes() -> None:
-	"""Bind base and stations to nearest graph nodes. Call after load_city, set_base, set_stations."""
+	"""Привязывает базу и станции к ближайшим узлам графа после загрузки города или изменения настроек."""
 	G = STATE.get("city_graph")
 	if G is None:
 		STATE["charger_nodes"] = {"base": None, "stations": []}
@@ -1111,6 +1159,7 @@ def refresh_charger_nodes() -> None:
 
 # Utilities
 async def resolve_point(coords: Optional[List[float]], address: Optional[str]):
+	"""Определяет точку."""
 	if coords and len(coords) == 2:
 		return tuple(coords)
 	if address:
@@ -1122,6 +1171,7 @@ async def resolve_point(coords: Optional[List[float]], address: Optional[str]):
 	return None
 
 def classify_order(order: AddOrderRequest) -> str:
+	"""Определяет тип заказ."""
 	if order.type_hint in ("delivery", "shooting", "work"):
 		return order.type_hint
 	text = " ".join(filter(None, [order.address_from, order.address_to]))
@@ -1203,6 +1253,7 @@ def _lawnmower_waypoints_inside_polygon(polygon: List[Tuple[float, float]], step
 
 
 def _polygon_bbox_dims_m(polygon: List[Tuple[float, float]]) -> Tuple[float, float]:
+	"""Вычисляет размеры ограничивающего прямоугольника полигона в метрах."""
 	if not polygon:
 		return (0.0, 0.0)
 	lats = [p[0] for p in polygon]
@@ -1222,7 +1273,7 @@ def _operator_area_grid_step_m(polygon: List[Tuple[float, float]]) -> float:
 
 
 def _operator_area_waypoints(order: Dict[str, Any]) -> List[Tuple[float, float]]:
-	"""Точки облёта области: облёт внутри выделенной зоны (сетка лаунмower), не только контур."""
+	"""Строит точки облета внутри выделенной области по схеме регулярного прохода, а не только по контуру."""
 	# Для continuation-задач используем уже оставшиеся внутренние точки,
 	# чтобы не генерировать всю сетку заново и не терять прогресс.
 	if order.get("remaining_waypoints"):
@@ -1254,11 +1305,12 @@ def _operator_area_waypoints(order: Dict[str, Any]) -> List[Tuple[float, float]]
 
 
 def _operator_area_root_order_id(order: Dict[str, Any]) -> str:
+	"""Возвращает идентификатор корневого заказа для цепочки работ операторского дрона."""
 	return str(order.get("root_order_id") or order.get("id") or "")
 
 
 def _segment_intersects_no_fly_zone(a: Tuple[float, float], b: Tuple[float, float], samples: int = 12) -> bool:
-	"""Проверка прямого сегмента на пересечение no-fly зон (дискретная аппроксимация)."""
+	"""Проверяет прямой сегмент на пересечение запретных зон дискретной аппроксимацией."""
 	if is_point_in_any_zone(a) or is_point_in_any_zone(b):
 		return True
 	for i in range(1, max(2, samples)):
@@ -1395,6 +1447,7 @@ def _advance_area_order_progress(order: Dict[str, Any], flown_points: List[Tuple
 
 
 def _to_coord_list(coords: List[Any]) -> List[Tuple[float, float]]:
+	"""Преобразует список координат к единому формату."""
 	out: List[Tuple[float, float]] = []
 	for p in coords or []:
 		if isinstance(p, (list, tuple)) and len(p) == 2:
@@ -1403,7 +1456,7 @@ def _to_coord_list(coords: List[Any]) -> List[Tuple[float, float]]:
 
 
 def _best_escape_graph_path(start: Tuple[float, float], battery_pct: float, drone_type: str = "operator") -> Tuple[List[Tuple[float, float]], float]:
-	"""Графовый выход до ближайшей зарядки: base/station."""
+	"""Строит путь по графу до ближайшей точки зарядки: базы или станции."""
 	chargers: List[Tuple[float, float]] = []
 	if STATE.get("base"):
 		chargers.append(tuple(STATE["base"]))
@@ -1421,6 +1474,7 @@ def _best_escape_graph_path(start: Tuple[float, float], battery_pct: float, dron
 
 
 def _concat_coords(a: List[Tuple[float, float]], b: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+	"""Объединяет координаты."""
 	if not a:
 		return list(b or [])
 	if not b:
@@ -1431,6 +1485,7 @@ def _concat_coords(a: List[Tuple[float, float]], b: List[Tuple[float, float]]) -
 
 
 def _get_active_order_for_drone(drone_id: str) -> Optional[Dict[str, Any]]:
+	"""Получает активный заказ, назначенный дрону."""
 	for o in STATE.get("orders", []):
 		if o.get("drone_id") == drone_id and o.get("status") in ("assigned", "in_progress", "waiting_continuation"):
 			return o
@@ -1438,6 +1493,7 @@ def _get_active_order_for_drone(drone_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _is_near_point(a: Tuple[float, float], b: Tuple[float, float], threshold_m: float = MISSION_POINT_NEAR_METERS) -> bool:
+	"""Проверяет близость двух точек с заданным порогом."""
 	try:
 		return haversine_m(tuple(a), tuple(b)) <= float(threshold_m)
 	except Exception:
@@ -1445,6 +1501,7 @@ def _is_near_point(a: Tuple[float, float], b: Tuple[float, float], threshold_m: 
 
 
 def _begin_service_stop(drone: Dict[str, Any], reason: str, ticks: int = SERVICE_STOP_TICKS, resume_status: str = "enroute") -> None:
+	"""Запускает сервисную остановку дрона в точке забора или выдачи."""
 	drone["service_pause_ticks"] = max(1, int(ticks))
 	drone["service_pause_reason"] = str(reason)
 	drone["service_resume_status"] = str(resume_status)
@@ -1453,6 +1510,7 @@ def _begin_service_stop(drone: Dict[str, Any], reason: str, ticks: int = SERVICE
 
 
 def _process_service_stop(drone_id: str, drone: Dict[str, Any]) -> bool:
+	"""Обрабатывает оставшееся время сервисной остановки."""
 	if drone.get("status") != "service_stop":
 		return False
 	ticks_left = int(drone.get("service_pause_ticks", 0) or 0)
@@ -1570,7 +1628,7 @@ def _repair_invalid_charging_state(drone_id: str, drone: Dict[str, Any]) -> None
 
 
 def _mark_order_in_progress_if_started(drone_id: str, drone: Dict[str, Any]) -> None:
-	"""Переводим заказ в in_progress, когда дрон реально движется по маршруту миссии."""
+	"""Переводит заказ в статус выполнения, когда дрон реально начинает движение по маршруту миссии."""
 	order = _get_active_order_for_drone(drone_id)
 	if not order:
 		return
@@ -1608,7 +1666,7 @@ def _sanitize_active_drone_state(drone_id: str, drone: Dict[str, Any]) -> None:
 
 
 def _find_existing_continuation(parent_order: Dict[str, Any], remaining_waypoints: List[Tuple[float, float]]) -> Optional[Dict[str, Any]]:
-	"""Защита от дублей continuation: ищем уже существующий order с тем же mission/остатком."""
+	"""Ищет уже созданное продолжение заказа, чтобы не создавать дубликаты для той же миссии и остатка маршрута."""
 	mission_id = str(parent_order.get("mission_id") or _operator_area_root_order_id(parent_order))
 	fingerprint = f"{mission_id}:{len(remaining_waypoints)}:{tuple(remaining_waypoints[:1] or [])}:{tuple(remaining_waypoints[-1:] or [])}"
 	for o in STATE.get("orders", []):
@@ -1620,6 +1678,7 @@ def _find_existing_continuation(parent_order: Dict[str, Any], remaining_waypoint
 
 
 def _new_operator_area_continuation(order: Dict[str, Any], handover_point: Tuple[float, float], remaining_waypoints: List[Tuple[float, float]]) -> Dict[str, Any]:
+	"""Выполняет служебную операцию: новый операторский дрон зону работ продолжение."""
 	root_id = _operator_area_root_order_id(order)
 	history = list(order.get("handover_history") or [])
 	history.append(tuple(handover_point))
@@ -1801,7 +1860,7 @@ def plan_operator_point_trip(
 
 
 def plan_operator_continuation_trip(drone: Dict[str, Any], order: Dict[str, Any]) -> Dict[str, Any]:
-	"""Continuation операторской area-задачи: перелёт к точке передачи и дальнейшая area-фаза."""
+	"""Создает продолжение операторской задачи: перелет к точке передачи и последующий облёт области."""
 	remaining = _operator_area_waypoints(order)
 	if not remaining:
 		return {"ok": False, "reason": "NO_PATH", "details": "no remaining waypoints"}
@@ -1820,6 +1879,7 @@ def plan_operator_continuation_trip(drone: Dict[str, Any], order: Dict[str, Any]
 
 
 async def rebuild_graph_with_zones():
+	"""Перестраивает граф с учетом зоны."""
 	city = STATE.get("city")
 	if not city:
 		return
@@ -1838,6 +1898,7 @@ async def rebuild_graph_with_zones():
 
 
 def _reset_order_plan_backoff(order: Dict[str, Any]) -> None:
+	"""Сбрасывает задержку повторного планирования заказа."""
 	for key in (
 		"last_plan_attempt_at",
 		"next_plan_attempt_at",
@@ -1851,6 +1912,7 @@ def _reset_order_plan_backoff(order: Dict[str, Any]) -> None:
 
 
 def _schedule_order_plan_retry(order: Dict[str, Any], reason: str, details: str, min_delay_s: float = ASSIGN_PLAN_BACKOFF_MIN_S) -> None:
+	"""Назначает повторную попытку планирования заказа с задержкой."""
 	now = time.time()
 	fail_count = int(order.get("plan_fail_count", 0) or 0) + 1
 	delay = max(min_delay_s, ASSIGN_PLAN_BACKOFF_MIN_S * (2 ** min(fail_count - 1, 3)))
@@ -1864,6 +1926,7 @@ def _schedule_order_plan_retry(order: Dict[str, Any], reason: str, details: str,
 
 def assign_orders():
 	# Очередь заказов: назначаем только на свободный дрон нужной категории; приоритет — по полю priority (больше = раньше).
+	"""Назначает ожидающие заказы подходящим дронам с учетом типа, заряда и доступного маршрута."""
 	city = STATE.get("city")
 	G = STATE.get("city_graph")
 	if not city or G is None:
@@ -2140,6 +2203,7 @@ def pick_drone_for_order(order: Dict[str, Any], required_drone_type: str) -> Opt
 
 
 def map_order_to_drone_type(order_type: str) -> str:
+	"""Сопоставляет тип заказа с требуемым типом дрона."""
 	if order_type == "delivery":
 		return "cargo"
 	if order_type == "shooting":
@@ -2282,6 +2346,7 @@ def _plan_order_trip_via_charger_first(
 
 
 def _direct_charger_points() -> List[Tuple[str, Tuple[float, float]]]:
+	"""Выполняет служебную операцию: прямой маршрут зарядную станцию точки."""
 	points: List[Tuple[str, Tuple[float, float]]] = []
 	base = STATE.get("base")
 	if base and isinstance(base, (list, tuple)) and len(base) == 2:
@@ -2293,6 +2358,7 @@ def _direct_charger_points() -> List[Tuple[str, Tuple[float, float]]]:
 
 
 def _interpolate_air_segment(start: Tuple[float, float], end: Tuple[float, float], step_m: float = 250.0) -> List[Tuple[float, float]]:
+	"""Разбивает воздушный сегмент на промежуточные точки."""
 	dist = haversine_m(start, end)
 	if dist <= step_m:
 		return [tuple(start), tuple(end)]
@@ -2305,6 +2371,7 @@ def _interpolate_air_segment(start: Tuple[float, float], end: Tuple[float, float
 
 
 def _dedupe_route_points(points: List[Tuple[float, float]], min_distance_m: float = 2.0) -> List[Tuple[float, float]]:
+	"""Удаляет слишком близкие дубли точек маршрута."""
 	result: List[Tuple[float, float]] = []
 	for point in points:
 		pt = (float(point[0]), float(point[1]))
@@ -2314,6 +2381,7 @@ def _dedupe_route_points(points: List[Tuple[float, float]], min_distance_m: floa
 
 
 def _to_local_xy(point: Tuple[float, float], origin: Tuple[float, float]) -> Tuple[float, float]:
+	"""Преобразует географическую точку в локальные координаты XY."""
 	avg_lat = math.radians((float(point[0]) + float(origin[0])) / 2.0)
 	x = (float(point[1]) - float(origin[1])) * 111320.0 * math.cos(avg_lat)
 	y = (float(point[0]) - float(origin[0])) * 111320.0
@@ -2321,6 +2389,7 @@ def _to_local_xy(point: Tuple[float, float], origin: Tuple[float, float]) -> Tup
 
 
 def _from_local_xy(point_xy: Tuple[float, float], origin: Tuple[float, float]) -> Tuple[float, float]:
+	"""Преобразует локальные координаты XY обратно в географическую точку."""
 	lat = float(origin[0]) + (float(point_xy[1]) / 111320.0)
 	cos_lat = max(0.25, math.cos(math.radians((float(origin[0]) + lat) / 2.0)))
 	lon = float(origin[1]) + (float(point_xy[0]) / (111320.0 * cos_lat))
@@ -2328,10 +2397,12 @@ def _from_local_xy(point_xy: Tuple[float, float], origin: Tuple[float, float]) -
 
 
 def _zone_circle_radius(zone: Dict[str, Any], padding_m: float = AIR_ZONE_PADDING_M) -> float:
+	"""Возвращает радиус круговой зоны с учетом защитного отступа."""
 	return max(1.0, float(zone.get("radius_m") or 0.0) + float(padding_m))
 
 
 def _point_in_zone_with_padding(point: Tuple[float, float], zone: Dict[str, Any], padding_m: float = AIR_ZONE_PADDING_M) -> bool:
+	"""Проверяет попадание точки в зону с учетом защитного отступа."""
 	zone_type = (zone.get("zone_type") or "rectangle").lower()
 	if zone_type == "circle":
 		center = (float(zone.get("center_lat")), float(zone.get("center_lon")))
@@ -2351,6 +2422,7 @@ def _segment_intersects_zone_with_padding(
 	zone: Dict[str, Any],
 	padding_m: float = AIR_ZONE_PADDING_M,
 ) -> bool:
+	"""Проверяет пересечение сегмента с зоной с учетом защитного отступа."""
 	if _point_in_zone_with_padding(start, zone, padding_m) or _point_in_zone_with_padding(end, zone, padding_m):
 		return True
 	zone_type = (zone.get("zone_type") or "rectangle").lower()
@@ -2380,6 +2452,7 @@ def _blocking_zones_for_segment(
 	end: Tuple[float, float],
 	zones: List[Dict[str, Any]],
 ) -> List[Tuple[float, Dict[str, Any]]]:
+	"""Находит запретные зоны, блокирующие заданный сегмент маршрута."""
 	result: List[Tuple[float, Dict[str, Any]]] = []
 	for zone in zones:
 		if not _segment_intersects_zone_with_padding(start, end, zone):
@@ -2392,6 +2465,7 @@ def _blocking_zones_for_segment(
 
 
 def _circle_tangent_points(point_xy: Tuple[float, float], radius_m: float) -> List[Tuple[float, float]]:
+	"""Вычисляет касательные точки к круговой зоне."""
 	dist = math.hypot(float(point_xy[0]), float(point_xy[1]))
 	if dist <= radius_m + 1.0:
 		return []
@@ -2410,6 +2484,7 @@ def _sample_arc_points(
 	end_angle: float,
 	direction: str,
 ) -> List[Tuple[float, float]]:
+	"""Строит набор точек вдоль дуги обхода круговой зоны."""
 	if direction == "ccw":
 		delta = (end_angle - start_angle) % (2.0 * math.pi)
 	else:
@@ -2432,6 +2507,7 @@ def _fallback_detour_candidates(
 	end: Tuple[float, float],
 	zone: Dict[str, Any],
 ) -> List[List[Tuple[float, float]]]:
+	"""Формирует резервные варианты обхода препятствия."""
 	center = _zone_center(zone)
 	origin = center
 	sx, sy = _to_local_xy(tuple(start), origin)
@@ -2457,6 +2533,7 @@ def _circle_detour_candidates(
 	end: Tuple[float, float],
 	zone: Dict[str, Any],
 ) -> List[List[Tuple[float, float]]]:
+	"""Формирует варианты обхода круговой запретной зоны."""
 	center = (float(zone.get("center_lat")), float(zone.get("center_lon")))
 	radius_m = _zone_circle_radius(zone)
 	origin = center
@@ -2487,6 +2564,7 @@ def _build_air_route(
 	zones: Optional[List[Dict[str, Any]]] = None,
 	depth: int = 0,
 ) -> Optional[List[Tuple[float, float]]]:
+	"""Строит воздушный маршрут."""
 	start = tuple(start)
 	end = tuple(end)
 	zone_list = list(zones if zones is not None else (STATE.get("no_fly_zones") or []))
@@ -2530,6 +2608,7 @@ def _plan_air_escape_to_charger(
 	drone_type: str,
 	reserve_pct: float,
 ) -> Tuple[Optional[List[Tuple[float, float]]], List[str], float]:
+	"""Планирует воздушный выход из зоны к зарядной станции."""
 	best_coords: Optional[List[Tuple[float, float]]] = None
 	best_chargers: List[str] = []
 	best_length = float("inf")
@@ -2559,6 +2638,7 @@ def _plan_direct_air_route_with_stations(
 	reserve_pct: float,
 	force_goal_charger: Optional[str] = None,
 ) -> Tuple[Optional[List[Tuple[float, float]]], List[str], float]:
+	"""Планирует прямой маршрут воздушный маршрут с учетом станции."""
 	chargers = _direct_charger_points()
 	current = tuple(start)
 	goal = tuple(goal)
@@ -2609,6 +2689,7 @@ def _plan_cargo_direct_air_trip(
 	battery_pct: float,
 	plan_reserve: float,
 ) -> Optional[Dict[str, Any]]:
+	"""Планирует грузовой дрон прямой маршрут воздушный поездку/полет."""
 	coords_a, chargers_a, len_a = _plan_direct_air_route_with_stations(
 		drone_pos, pickup, battery_pct, MODE_EMPTY, "cargo", plan_reserve
 	)
@@ -2813,6 +2894,7 @@ def _plan_active_cargo_order_from_drone(
 	destination: Optional[Tuple[float, float]] = None,
 	battery_pct: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
+	"""Планирует активный грузовой дрон заказ из дрон."""
 	current_pos = tuple(drone.get("pos") or ())
 	if len(current_pos) != 2:
 		return None
@@ -2871,7 +2953,7 @@ def _plan_active_cargo_order_from_drone(
 
 
 def plan_via_base_if_needed(current: Tuple[float, float], end: Tuple[float, float], drone_type: str, battery_level: float):
-	"""Single segment with optional charging; uses meta-graph (plan_with_chargers)."""
+	"""Планирует один сегмент с возможной зарядкой через метаграф зарядных станций."""
 	if drone_type == "cargo":
 		coords, _chargers, length = _plan_direct_air_route_with_stations(
 			tuple(current),
@@ -2899,6 +2981,7 @@ def plan_via_base_if_needed(current: Tuple[float, float], end: Tuple[float, floa
 
 
 def _handle_battery_depletion(drone_id: str, drone: Dict[str, Any]) -> bool:
+	"""Обрабатывает полный или критический разряд батареи."""
 	if drone.get("status") == "emergency_landed":
 		return True
 	current = tuple(drone.get("pos") or ())
@@ -2930,7 +3013,7 @@ def _handle_battery_depletion(drone_id: str, drone: Dict[str, Any]) -> bool:
 
 
 def can_escape_after(point: Tuple[float, float], drone_type: str) -> bool:
-	"""True if from point we can reach some charger with reserve (plan_with_chargers)."""
+	"""Проверяет, можно ли из точки достигнуть зарядной станции с учетом резерва."""
 	G = STATE.get("city_graph")
 	if G is None:
 		return True
@@ -2953,6 +3036,7 @@ def can_escape_after(point: Tuple[float, float], drone_type: str) -> bool:
 
 def simulate_step():
 	# move drones along their routes, drain battery, reroute if blocked and avoid collisions
+	"""Выполняет один шаг движения всех дронов и обновляет их статусы, батарею и телеметрию."""
 	_routing_service.set_battery_mode(STATE.get("battery_mode", "reality"))
 	city = STATE.get("city")
 	G = STATE.get("city_graph")
@@ -3176,6 +3260,7 @@ def _avoidance_step(drone_id: str, drone: Dict[str, Any]) -> None:
 
 
 def will_collide(drone_id: str, next_pos: Tuple[float,float]) -> bool:
+	"""Проверяет будущую столкновение."""
 	for other_id, other in STATE["drones"].items():
 		if other_id == drone_id:
 			continue
@@ -3193,6 +3278,7 @@ def _is_drone_loaded(drone: Dict[str, Any]) -> bool:
 
 def battery_drain(drone: Dict[str, Any], distance_m: float):
 	# Single source of truth: RoutingService._get_drone_params. drain в %: distance_m / m_per_pct (без *100)
+	"""Списывает заряд аккумулятора с учетом расстояния, типа дрона, груза и погодных условий."""
 	p = _routing_service._get_drone_params(drone.get("type", "cargo"))
 	loaded = _is_drone_loaded(drone)
 	m_per_pct = p["loaded_m_per_pct"] if loaded else p["empty_m_per_pct"]
@@ -3215,6 +3301,7 @@ def battery_drain(drone: Dict[str, Any], distance_m: float):
 
 
 def _point_in_zone(point: Tuple[float, float], zone: Dict[str, Any]) -> bool:
+	"""Обрабатывает точку в зону."""
 	try:
 		lat, lon = point
 		zone_type = (zone.get("zone_type") or "rectangle").lower()
@@ -3232,6 +3319,7 @@ def _point_in_zone(point: Tuple[float, float], zone: Dict[str, Any]) -> bool:
 
 
 def _remaining_route_enters_zone(drone: Dict[str, Any]) -> bool:
+	"""Проверяет, входит ли оставшийся маршрут в запретную зону."""
 	route = drone.get("route") or []
 	idx = max(0, int(drone.get("target_idx", 0)))
 	for point in route[idx:]:
@@ -3241,6 +3329,7 @@ def _remaining_route_enters_zone(drone: Dict[str, Any]) -> bool:
 
 
 def _find_shortest_escape_coords(current: Tuple[float, float], drone_type: str, battery: float) -> Tuple[Optional[List[Tuple[float, float]]], float]:
+	"""Ищет кратчайший набор координат для выхода из запретной зоны."""
 	if drone_type == "cargo":
 		containing = [zone for zone in STATE.get("no_fly_zones", []) if _point_in_zone(current, zone)]
 		if containing:
@@ -3291,6 +3380,7 @@ def _find_shortest_escape_coords(current: Tuple[float, float], drone_type: str, 
 
 
 def _route_drone_out_of_no_fly_zone(drone_id: str, drone: Dict[str, Any]) -> bool:
+	"""Строит маршрут вывода дрона из запретной зоны."""
 	current = tuple(drone.get("pos") or ())
 	if len(current) != 2:
 		return False
@@ -3334,6 +3424,7 @@ def _route_drone_out_of_no_fly_zone(drone_id: str, drone: Dict[str, Any]) -> boo
 
 
 def _reroute_active_drones_after_zone_change() -> None:
+	"""Перестраивает маршруты активных дронов после изменения запретных зон."""
 	for drone_id, drone in STATE.get("drones", {}).items():
 		status = drone.get("status")
 		if status not in ("enroute", "return_charge", "return_base", "low_battery", "zone_escape"):
@@ -3376,12 +3467,14 @@ def _reroute_active_drones_after_zone_change() -> None:
 
 
 def is_point_in_any_zone(point: Tuple[float, float]) -> bool:
+	"""Проверяет точку в любой зону."""
 	for z in STATE["no_fly_zones"]:
 		if _point_in_zone(point, z):
 			return True
 	return False
 
 def is_at_any_station(point: Tuple[float, float]) -> bool:
+	"""Проверяет, находится ли точка рядом с любой зарядной станцией."""
 	try:
 		for s in STATE.get("stations", []):
 			if haversine_m(point, tuple(s)) < STATION_NEAR_METERS:
@@ -3392,6 +3485,7 @@ def is_at_any_station(point: Tuple[float, float]) -> bool:
 
 
 def _is_at_charge_location(point: Tuple[float, float]) -> bool:
+	"""Проверяет, находится ли точка рядом с любой точкой зарядки."""
 	try:
 		if is_at_any_station(point):
 			return True
@@ -3401,6 +3495,7 @@ def _is_at_charge_location(point: Tuple[float, float]) -> bool:
 		return False
 
 def nearest_station_index(point: Tuple[float,float]) -> Optional[int]:
+    """Находит индекс ближайшей зарядной станции."""
     try:
         best_i = None
         best_d = float('inf')
@@ -3414,6 +3509,7 @@ def nearest_station_index(point: Tuple[float,float]) -> Optional[int]:
         return None
 
 def maybe_route_to_base(drone: Dict[str, Any]):
+	"""При необходимости строит маршрут возвращения на базу."""
 	base = STATE.get("base")
 	if not base:
 		return
@@ -3547,6 +3643,7 @@ def _restore_route_after_charging(drone: Dict[str, Any]) -> bool:
 
 
 def _has_assigned_order_for_drone(drone_id: str) -> bool:
+	"""Проверяет, есть ли у дрона назначенный заказ."""
 	for o in STATE.get("orders", []):
 		if o.get("drone_id") == drone_id and o.get("status") in ("assigned", "in_progress", "waiting_continuation"):
 			return True
@@ -3555,6 +3652,7 @@ def _has_assigned_order_for_drone(drone_id: str) -> bool:
 
 def _resume_after_charge_or_hold(drone_id: str, drone: Dict[str, Any]) -> None:
 	# Дрон выходит из зарядки: сначала убираем из очередей (иначе UI и логика видят «в зарядке» при battery=100).
+	"""Возобновляет движение дрона после зарядки или ожидания."""
 	_remove_drone_from_charge_queues(drone_id)
 	# Восстановление маршрута после промежуточной зарядки:
 	# 1) сначала заранее сохранённый хвост маршрута,
@@ -3648,6 +3746,7 @@ def maybe_route_to_base_or_station(drone: Dict[str, Any]):
 		drone["status"] = "return_charge"
 
 def assign_to_charger_queue(drone_id: str) -> bool:
+    """Назначает дрон в очередь зарядной станции."""
     d = STATE["drones"].get(drone_id)
     if not d:
         return False
@@ -3700,6 +3799,7 @@ def assign_to_charger_queue(drone_id: str) -> bool:
 
 def progress_charging():
     # base
+    """Обновляет процесс зарядки дронов и состояние очередей на зарядных станциях."""
     bq = STATE.get("base_queue") or {"charging": [], "queue": [], "capacity": 2}
     done = []
     for did in list(bq.get("charging", [])):
@@ -3781,6 +3881,7 @@ def progress_charging():
         _force_exit_charging_if_complete(_did, _d)
 
 def _area_chain_has_pending(root_order_id: str, exclude_order_id: Optional[str] = None) -> bool:
+	"""Проверяет, остались ли незавершенные заказы в цепочке работ по области."""
 	for o in STATE.get("orders", []):
 		if o.get("id") == exclude_order_id:
 			continue
@@ -3792,6 +3893,7 @@ def _area_chain_has_pending(root_order_id: str, exclude_order_id: Optional[str] 
 
 
 def _mark_area_root_completed_if_ready(root_order_id: str) -> None:
+	"""Завершает корневую задачу области, если все дочерние этапы выполнены."""
 	root = next((o for o in STATE.get("orders", []) if o.get("id") == root_order_id), None)
 	if not root:
 		return
@@ -3808,6 +3910,7 @@ def _mark_area_root_completed_if_ready(root_order_id: str) -> None:
 
 def mark_order_completed_if_any(drone_id: str):
 	# Финализация заказа: выполняем только при реальном окончании миссии, не при промежуточной зарядке.
+	"""Проверяет достижение целевой точки и завершает заказ или этап миссии при необходимости."""
 	drone = STATE.get("drones", {}).get(drone_id)
 	if not drone:
 		return
@@ -3873,6 +3976,7 @@ def mark_order_completed_if_any(drone_id: str):
 
 # Telemetry helpers
 def compute_link_quality(drone: Dict[str, Any]):
+    """Вычисляет связь качество."""
     base = STATE.get("base")
     if not base:
         drone["link_quality"] = 0.7  # default medium
@@ -3894,6 +3998,7 @@ def compute_link_quality(drone: Dict[str, Any]):
         drone["link_quality"] = 0.5
 
 def ensure_base_drones():
+    """Проверяет и подготавливает базу дроны."""
     base = STATE.get("base")
     inv = STATE.get("inventory") or {}
     if not base or not isinstance(inv, dict):
@@ -3927,6 +4032,7 @@ def _next_drone_id(drone_type: str) -> str:
 
 
 def spawn_drone(drone_type: str, pos: Tuple[float, float], battery: float = 100.0) -> str:
+    """Создает дрон дрон."""
     did = _next_drone_id(drone_type)
     STATE["drones"][did] = {
         "pos": pos,
@@ -3945,6 +4051,7 @@ def spawn_drone_from_inventory(
     caller: str = "unknown",
     spawn_pos: Optional[Tuple[float, float]] = None,
 ) -> Optional[str]:
+    """Создает дрон из доступного инвентаря."""
     base = STATE.get("base")
     inv = STATE.get("inventory") or {}
     if not spawn_pos and not base:
@@ -3990,6 +4097,7 @@ def _first_meaningful_target_idx(current_pos: Tuple[float, float], route: List[T
 
 # Split a full route into two: up to first charger (station/base), then remainder to resume after charging
 def apply_midroute_charging(drone: Dict[str, Any], full_coords: List[Tuple[float, float]]):
+    """Добавляет промежуточную зарядку в маршрут при необходимости."""
     try:
         if not isinstance(full_coords, list) or len(full_coords) < 2:
             drone["route"] = list(full_coords or [])
@@ -4028,6 +4136,7 @@ def apply_midroute_charging(drone: Dict[str, Any], full_coords: List[Tuple[float
 
 # Persistence
 async def persist_state():
+    """Сохраняет состояние."""
     if not _redis:
         return
     try:
@@ -4050,6 +4159,7 @@ async def persist_state():
         logger.exception("persist_state failed")
 
 async def restore_state():
+    """Восстанавливает состояние."""
     if not _redis:
         return
     try:
@@ -4098,11 +4208,13 @@ async def restore_state():
 
 
 def move_towards(a: Tuple[float, float], b: Tuple[float, float], frac: float) -> Tuple[float, float]:
+	"""Вычисляет промежуточную точку движения от текущей позиции к цели."""
 	frac = max(0.0, min(1.0, frac))
 	return (a[0] + (b[0]-a[0]) * frac, a[1] + (b[1]-a[1]) * frac)
 
 
 def haversine_m(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+	"""Вычисляет расстояние между двумя географическими координатами в метрах."""
 	R = 6371000.0
 	lat1 = math.radians(a[0]) ; lat2 = math.radians(b[0])
 	dlat = lat2 - lat1

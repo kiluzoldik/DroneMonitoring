@@ -6,6 +6,7 @@ from drone_monitoring.service import MissionMonitoringService
 
 
 def _build_service(db_name: str) -> tuple[MissionMonitoringService, Path]:
+    """Строит сервисную операцию."""
     data_dir = Path(__file__).resolve().parents[1] / "data"
     data_dir.mkdir(exist_ok=True)
     stem = Path(db_name).stem
@@ -16,6 +17,7 @@ def _build_service(db_name: str) -> tuple[MissionMonitoringService, Path]:
 
 
 def _cleanup_db(db_path: Path) -> None:
+    """Очищает тестовую базу данных."""
     for suffix in ("", "-wal", "-shm", "-journal"):
         try:
             candidate = Path(f"{db_path}{suffix}")
@@ -26,6 +28,7 @@ def _cleanup_db(db_path: Path) -> None:
 
 
 def test_live_mission_supports_multiple_no_fly_zones_and_destination_update():
+    """Проверяет live-миссию с несколькими запретными зонами и изменением точки доставки."""
     service, db_path = _build_service("test_monitoring_service_live.sqlite3")
     try:
         mission = service.create_live_mission_draft(
@@ -62,6 +65,7 @@ def test_live_mission_supports_multiple_no_fly_zones_and_destination_update():
 
 
 def test_synthetic_mission_persists_tracks_events_and_metrics():
+    """Проверяет синтетическую миссию с сохранением треков, событий и метрик."""
     service, db_path = _build_service("test_monitoring_service_synth.sqlite3")
     try:
         mission = service.create_synthetic_mission(

@@ -33,7 +33,7 @@ def make_mock_graph(
     base_pos: Tuple[float, float] = (48.70, 44.51),
     station_positions: List[Tuple[float, float]] = None,
 ) -> nx.Graph:
-    """Build a simple chain graph with base and station nodes (small to avoid timeout)."""
+    """Создает небольшой тестовый граф-цепочку с базой и зарядной станцией."""
     if station_positions is None:
         station_positions = [(48.702, 44.512), (48.704, 44.514)]
     G = nx.Graph()
@@ -57,25 +57,29 @@ def make_mock_graph(
 
 
 def _routing():
+    """Выполняет служебную операцию: маршрутизацию."""
     return RoutingService(_DummyGraphService())
 
 
 def _mock_g():
+    """Выполняет служебную операцию: тестовый объект g."""
     return make_mock_graph(15)
 
 
 if HAS_PYTEST:
     @pytest.fixture
     def routing():
+        """Выполняет служебную операцию: маршрутизацию."""
         return _routing()
 
     @pytest.fixture
     def mock_g():
+        """Выполняет служебную операцию: тестовый объект g."""
         return _mock_g()
 
 
 def test_battery_params_single_source(routing: RoutingService):
-    """Drone params contain empty_m_per_pct and loaded_m_per_pct; loaded < empty per type."""
+    """Проверяет, что параметры расхода батареи заданы для пустого и загруженного режимов."""
     for drone_type in ("cargo", "operator", "cleaner"):
         p = routing._get_drone_params(drone_type)
         assert "empty_m_per_pct" in p
@@ -84,7 +88,7 @@ def test_battery_params_single_source(routing: RoutingService):
 
 
 def test_compute_battery_after(routing: RoutingService):
-    """compute_battery_after: empty mode uses more m per % than loaded (less drain per km when empty)."""
+    """Проверяет расчет заряда после полета для пустого и загруженного режимов."""
     # Empty: cargo empty_m_per_pct=120 -> 1000m ≈ 8.33% drain, ~91.67% left
     b_after = routing.compute_battery_after(1000.0, 100.0, MODE_EMPTY, "cargo")
     assert 90.0 <= b_after <= 93.0
@@ -93,7 +97,7 @@ def test_compute_battery_after(routing: RoutingService):
 
 
 def test_max_reachable_distance(routing: RoutingService):
-    """max_reachable_distance: with reserve, 50% battery gives less than 50% * m_per_pct."""
+    """Проверяет, что достижимая дистанция учитывает резерв батареи."""
     d = routing.max_reachable_distance(50.0, MODE_EMPTY, "cargo", reserve_pct=10.0)
     p = routing._get_drone_params("cargo")
     expected_max = (50.0 - 10.0) * p["empty_m_per_pct"]
@@ -101,7 +105,7 @@ def test_max_reachable_distance(routing: RoutingService):
 
 
 def test_plan_segment(routing: RoutingService, mock_g: nx.Graph):
-    """plan_segment returns path and coords when path exists within max_range."""
+    """Проверяет построение сегмента маршрута при достижимом пути."""
     start = mock_g.nodes["base"]["pos"]
     end = mock_g.nodes["n5"]["pos"]
     path, coords, length = routing.plan_segment(mock_g, start, end, max_range_m=10000.0)
@@ -111,7 +115,7 @@ def test_plan_segment(routing: RoutingService, mock_g: nx.Graph):
 
 
 def test_build_meta_graph(routing: RoutingService, mock_g: nx.Graph):
-    """Meta-graph has edges only when segment is feasible (length <= max_reachable)."""
+    """Проверяет, что метаграф содержит только достижимые сегменты."""
     points = {"start": "base", "goal": "n5", "station_0": "station_0", "station_1": "station_1"}
     H = routing.build_meta_graph(
         mock_g, points, "start", ["station_0", "station_1"],
@@ -122,7 +126,7 @@ def test_build_meta_graph(routing: RoutingService, mock_g: nx.Graph):
 
 
 def test_plan_with_chargers_via_station(routing: RoutingService, mock_g: nx.Graph):
-    """plan_with_chargers returns path when feasible (via station or direct)."""
+    """Проверяет построение маршрута через станции зарядки или напрямую."""
     charger_nodes = {"base": "base", "stations": ["station_0", "station_1"]}
     path, coords, length, visited = routing.plan_with_chargers(
         mock_g, "base", "n5", battery_pct=80.0, mode=MODE_EMPTY, drone_type="cargo",
@@ -134,7 +138,7 @@ def test_plan_with_chargers_via_station(routing: RoutingService, mock_g: nx.Grap
 
 
 def test_plan_with_chargers_insufficient_escape(routing: RoutingService = None):
-    """When goal is far and battery after segment is too low to reach any charger, no path."""
+    """Проверяет отказ планирования, если после дальнего сегмента невозможно достигнуть зарядки."""
     if routing is None:
         routing = _routing()
     # Graph: start --500m-- mid --5000m-- goal; no charger near goal; battery 5%
@@ -161,14 +165,14 @@ def test_plan_with_chargers_insufficient_escape(routing: RoutingService = None):
 
 
 def test_loaded_vs_empty_consumption(routing: RoutingService):
-    """Loaded mode reduces max_reachable_distance vs empty for same battery."""
+    """Проверяет, что загруженный режим уменьшает достижимую дистанцию."""
     d_empty = routing.max_reachable_distance(50.0, MODE_EMPTY, "cargo")
     d_loaded = routing.max_reachable_distance(50.0, MODE_LOADED, "cargo")
     assert d_loaded < d_empty
 
 
 def run_all():
-    """Run tests without pytest."""
+    """Запускает тесты без использования pytest."""
     routing = _routing()
     mock_g = _mock_g()
     test_battery_params_single_source(routing)

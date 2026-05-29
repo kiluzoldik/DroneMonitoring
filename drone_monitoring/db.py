@@ -12,14 +12,17 @@ DEFAULT_DB_PATH = os.environ.get("MONITORING_DB_PATH", os.path.join("data", "mon
 
 
 def utc_now_iso() -> str:
+    """Возвращает текущую дату и время в UTC в ISO-формате."""
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def ensure_db_dir(db_path: str = DEFAULT_DB_PATH) -> None:
+    """Создает каталог для файла базы данных при необходимости."""
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
 
 def connect(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+    """Открывает подключение к SQLite и включает параметры, нужные для устойчивой работы."""
     ensure_db_dir(db_path)
     conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
     conn.row_factory = sqlite3.Row
@@ -37,6 +40,7 @@ def connect(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
 
 @contextmanager
 def session(db_path: str = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connection]:
+    """Предоставляет контекстную сессию SQLite с автоматическим commit или rollback."""
     conn = connect(db_path)
     try:
         yield conn
@@ -46,6 +50,7 @@ def session(db_path: str = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connection]:
 
 
 def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
+    """Создает таблицы базы данных мониторинга, если они еще не были созданы."""
     schema = """
     CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,

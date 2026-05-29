@@ -7,12 +7,14 @@ from typing import Any, Dict, List, Tuple
 
 
 def parse_ts(value: str | datetime) -> datetime:
+    """Преобразует строковую временную метку в объект datetime."""
     if isinstance(value, datetime):
         return value
     return datetime.fromisoformat(str(value))
 
 
 def haversine_m(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+    """Вычисляет расстояние между двумя географическими координатами в метрах."""
     lat1, lon1 = math.radians(a[0]), math.radians(a[1])
     lat2, lon2 = math.radians(b[0]), math.radians(b[1])
     d_lat = lat2 - lat1
@@ -25,6 +27,7 @@ def haversine_m(a: Tuple[float, float], b: Tuple[float, float]) -> float:
 
 
 def heading_deg(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+    """Вычисляет направление движения между двумя точками в градусах."""
     lat1, lon1 = math.radians(a[0]), math.radians(a[1])
     lat2, lon2 = math.radians(b[0]), math.radians(b[1])
     d_lon = lon2 - lon1
@@ -35,6 +38,7 @@ def heading_deg(a: Tuple[float, float], b: Tuple[float, float]) -> float:
 
 
 def project_m(point: Tuple[float, float], origin: Tuple[float, float]) -> Tuple[float, float]:
+    """Проецирует географическую точку в локальную метрическую систему координат."""
     lat, lon = point
     o_lat, o_lon = origin
     y = (lat - o_lat) * 111320.0
@@ -43,6 +47,7 @@ def project_m(point: Tuple[float, float], origin: Tuple[float, float]) -> Tuple[
 
 
 def unproject_m(xy: Tuple[float, float], origin: Tuple[float, float]) -> Tuple[float, float]:
+    """Преобразует локальные метрические координаты обратно в широту и долготу."""
     x, y = xy
     o_lat, o_lon = origin
     lat = o_lat + y / 111320.0
@@ -52,6 +57,7 @@ def unproject_m(xy: Tuple[float, float], origin: Tuple[float, float]) -> Tuple[f
 
 class ScalarKalman:
     def __init__(self, process_noise: float = 2.0, measurement_noise: float = 18.0):
+        """Инициализирует."""
         self.process_noise = process_noise
         self.measurement_noise = measurement_noise
         self.estimate = 0.0
@@ -59,6 +65,7 @@ class ScalarKalman:
         self.initialized = False
 
     def update(self, measurement: float) -> float:
+        """Обновляет."""
         if not self.initialized:
             self.estimate = measurement
             self.error = 1.0
@@ -72,6 +79,7 @@ class ScalarKalman:
 
 
 def process_track(raw_points: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
+    """Обрабатывает сырой GNSS-трек: сортирует точки, ищет разрывы, фильтрует выбросы и строит сглаженный трек."""
     signal_gap_seconds = int(config.get("signal_gap_seconds", 3))
     interpolate_gap_seconds = int(config.get("interpolate_gap_seconds", 5))
     max_speed_mps = float(config.get("max_speed_mps", 18.0))
@@ -205,6 +213,7 @@ def process_track(raw_points: List[Dict[str, Any]], config: Dict[str, Any]) -> D
 
 
 def compute_metrics(raw_points: List[Dict[str, Any]], processed_points: List[Dict[str, Any]], summary: Dict[str, Any]) -> Dict[str, float]:
+    """Вычисляет метрики качества обработанного GNSS-трека."""
     processed_by_raw = {
         int(point["source_raw_id"]): point
         for point in processed_points

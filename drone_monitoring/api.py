@@ -15,6 +15,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 def _read_static_page(name: str) -> HTMLResponse:
+    """Читает HTML-страницу из каталога static."""
     path = STATIC_DIR / name
     try:
         return HTMLResponse(path.read_text(encoding="utf-8"))
@@ -23,16 +24,20 @@ def _read_static_page(name: str) -> HTMLResponse:
 
 
 def register_monitoring_routes(app: FastAPI, monitor: MissionMonitoringService, runtime: Dict[str, Any]) -> None:
+    """Регистрирует HTTP-страницы и API-маршруты подсистемы мониторинга миссий."""
     @app.get("/monitor")
     async def monitoring_page():
+        """Выполняет служебную операцию: мониторинг страницу."""
         return _read_static_page("mission_monitor.html")
 
     @app.get("/mission-setup")
     async def mission_setup_page():
+        """Возвращает страницу постановки миссии."""
         return _read_static_page("mission_setup.html")
 
     @app.post("/api/missions/synthetic")
     async def create_synthetic_mission(body: SyntheticMissionRequest):
+        """Создает синтетическую миссию."""
         if body.start_live:
             mission = await asyncio.to_thread(monitor.create_demo_live_mission, body.title, body.city, body.seed)
             await runtime["ensure_demo_environment"](mission["city"])
@@ -45,6 +50,7 @@ def register_monitoring_routes(app: FastAPI, monitor: MissionMonitoringService, 
 
     @app.post("/api/missions/live")
     async def create_live_mission(body: LiveMissionRequest):
+        """Создает live-миссию."""
         await runtime["ensure_demo_environment"](body.city)
         exact_start = (body.start.lat, body.start.lon)
         exact_delivery = (body.delivery.lat, body.delivery.lon)
@@ -89,6 +95,7 @@ def register_monitoring_routes(app: FastAPI, monitor: MissionMonitoringService, 
 
     @app.post("/api/missions/{mission_id}/launch")
     async def launch_existing_mission(mission_id: str, body: LaunchMissionRequest):
+        """Запускает ранее созданную миссию."""
         mission = await asyncio.to_thread(monitor.get_mission, mission_id)
         if mission.get("order_id"):
             return JSONResponse(status_code=400, content={"ok": False, "error": "Mission is already launched"})
@@ -99,32 +106,39 @@ def register_monitoring_routes(app: FastAPI, monitor: MissionMonitoringService, 
 
     @app.get("/api/missions")
     async def list_missions(scope: str = "active"):
+        """Возвращает список миссий."""
         return {"missions": await asyncio.to_thread(monitor.list_missions, scope)}
 
     @app.get("/api/missions/{mission_id}")
     async def get_mission(mission_id: str):
+        """Получает миссию."""
         return {"mission": await asyncio.to_thread(monitor.get_mission, mission_id)}
 
     @app.get("/api/missions/{mission_id}/track/raw")
     async def get_raw_track(mission_id: str):
+        """Получает сырой трек миссии."""
         return await asyncio.to_thread(monitor.get_raw_track, mission_id)
 
     @app.get("/api/missions/{mission_id}/track/processed")
     async def get_processed_track(mission_id: str):
+        """Получает обработанный трек."""
         return await asyncio.to_thread(monitor.get_processed_track, mission_id)
 
     @app.get("/api/missions/{mission_id}/geozones")
     async def get_geozones(mission_id: str):
+        """Получает геозоны миссии."""
         geozones = await asyncio.to_thread(monitor.get_geozones, mission_id)
         return {"mission_id": mission_id, "geozones": geozones}
 
     @app.post("/api/missions/{mission_id}/process")
     async def process_mission(mission_id: str, body: ProcessMissionRequest):
+        """Обрабатывает миссию."""
         result = await asyncio.to_thread(monitor.run_processing, mission_id, body.model_dump())
         return {"ok": True, **result}
 
     @app.post("/api/missions/{mission_id}/destination")
     async def update_mission_destination(mission_id: str, body: UpdateMissionDestinationRequest):
+        """Обновляет точку доставки миссии."""
         mission = await asyncio.to_thread(monitor.get_mission, mission_id)
         exact_destination = (body.destination.lat, body.destination.lon)
         updated = await asyncio.to_thread(monitor.update_mission_destination, mission_id, exact_destination)
@@ -133,19 +147,23 @@ def register_monitoring_routes(app: FastAPI, monitor: MissionMonitoringService, 
 
     @app.post("/api/missions/{mission_id}/cancel")
     async def cancel_mission(mission_id: str, body: CancelMissionRequest | None = None):
+        """Отменяет миссию."""
         await runtime["cancel_runtime_mission"](mission_id)
         mission = await asyncio.to_thread(monitor.cancel_mission, mission_id, body.reason if body else None)
         return {"ok": True, "mission": mission}
 
     @app.get("/api/missions/{mission_id}/events")
     async def get_events(mission_id: str):
+        """Получает события."""
         return await asyncio.to_thread(monitor.get_events, mission_id)
 
     @app.get("/api/missions/{mission_id}/metrics")
     async def get_metrics(mission_id: str):
+        """Получает метрики."""
         return await asyncio.to_thread(monitor.get_metrics, mission_id)
 
     @app.get("/api/drones/{drone_id}/monitoring")
     async def get_drone_monitoring(drone_id: str):
+        """Получает данные мониторинга выбранного дрона."""
         runtime_drone = runtime["state"].get("drones", {}).get(drone_id)
         return await asyncio.to_thread(monitor.get_drone_monitoring, drone_id, runtime_drone)

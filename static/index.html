@@ -723,11 +723,13 @@ let operatorAreaMode = 'area';  // 'area' = rectangle, 'lasso' = polygon
 let tempOperatorRect = null;
 let tempOperatorPolygon = null;
 let operatorAreaStartLatLng = null;
+// Отправляет станции debounced.
 function pushStationsDebounced(){
     if (pushStationsTimer) clearTimeout(pushStationsTimer);
     pushStationsTimer = setTimeout(()=>{ pushStations(); }, 300);
 }
 
+// Обновляет заказ форму by дрон тип.
 function updateOrderFormByDroneType(){
     const droneType = (document.getElementById('droneType').value || '').trim();
     const cargoBlock = document.getElementById('orderFormCargo');
@@ -751,6 +753,7 @@ function updateOrderFormByDroneType(){
     if (droneType !== 'operator'){ operatorAreaDrawing = false; operatorAreaPolygon = null; tempOperatorRect && map.removeLayer(tempOperatorRect); tempOperatorRect = null; tempOperatorPolygon && map.removeLayer(tempOperatorPolygon); tempOperatorPolygon = null; }
 }
 
+// Переключает операторский дрон зону работ draw.
 function toggleOperatorAreaDraw(){
     if (operatorAreaMode === 'lasso' && operatorAreaPolygon && operatorAreaPolygon.length >= 3){
         operatorAreaDrawing = false;
@@ -779,6 +782,7 @@ function toggleOperatorAreaDraw(){
 }
 
 let ws;
+// Устанавливает WebSocket-соединение и подключает live-обновления интерфейса.
 function connectWS(){
 	const proto = location.protocol === 'https:' ? 'wss' : 'ws';
 	ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -807,6 +811,7 @@ ws.onmessage = ev => {
 }
 connectWS();
 
+// Обновляет список заказов и их состояние в пользовательском интерфейсе.
 function updateOrders(orders){
 	const c = document.getElementById('orders');
 	const prevTop = c.scrollTop; const prevHeight = c.scrollHeight;
@@ -824,8 +829,10 @@ function updateOrders(orders){
 	// keep scroll stable
 	c.scrollTop = Math.min(prevTop, c.scrollHeight - (prevHeight - prevTop));
 }
+// Форматирует.
 function fmt(p){ return p ? `${p[0].toFixed(5)}, ${p[1].toFixed(5)}` : '-'; }
 
+// Выполняет служебную операцию: дрон иконку HTML.
 function droneIconHtml(droneType, color){
     const base = 'width:18px;height:18px;border:2px solid white;box-shadow:0 0 6px rgba(0,0,0,.4);box-sizing:border-box';
     if (droneType === 'operator') {
@@ -837,6 +844,7 @@ function droneIconHtml(droneType, color){
     return `<div style="${base};background:${color};border-radius:0"></div>`;
 }
 
+// Обновляет погоду u i.
 function updateWeatherUI(w){
     if (!w) return;
     const desc = document.getElementById('weatherDesc');
@@ -846,6 +854,7 @@ function updateWeatherUI(w){
     if (humidity) humidity.textContent = w.humidity != null ? w.humidity : '—';
     if (wind) wind.textContent = w.wind_mps != null ? w.wind_mps : '—';
 }
+// Обновляет погоду.
 async function refreshWeather(){
     try {
         const r = await fetch('/api/weather/fetch');
@@ -853,6 +862,7 @@ async function refreshWeather(){
         if (j.weather) updateWeatherUI(j.weather);
     } catch(e) { console.warn('refreshWeather failed', e); }
 }
+// Устанавливает батарею режим.
 async function setBatteryMode(mode){
     try {
         const r = await fetch('/api/battery_mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
@@ -860,6 +870,7 @@ async function setBatteryMode(mode){
         if (j.ok) updateBatteryModeUI(j.mode);
     } catch(e) { console.warn('setBatteryMode failed', e); }
 }
+// Обновляет батарею режим u i.
 function updateBatteryModeUI(mode){
     const testBtn = document.getElementById('btnBatteryTest');
     const realityBtn = document.getElementById('btnBatteryReality');
@@ -869,6 +880,7 @@ function updateBatteryModeUI(mode){
     if (label) label.textContent = mode === 'test' ? 'Тест (укороченная дальность)' : 'Реальность';
 }
 
+// Обновляет маркеры дронов и сведения о них на карте.
 function updateDrones(drones){
 	// do not reset arrays drastically; remove previous polylines
 	Object.values(routeLayers).forEach(l=> map.removeLayer(l));
@@ -919,6 +931,7 @@ function updateDrones(drones){
 	list.scrollTop = Math.min(prevTop, list.scrollHeight - (prevHeight - prevTop));
 }
 
+// Отрисовывает запретные зоны на карте.
 function drawZones(zones){
 	zoneLayers.forEach(l=> map.removeLayer(l));
 	zoneLayers = [];
@@ -934,6 +947,7 @@ function drawZones(zones){
 	});
 }
 
+// Отрисовывает станции зарядки на карте.
 function drawStations(){
     stationMarkers.forEach(m=> map.removeLayer(m));
     stationMarkers = [];
@@ -948,6 +962,7 @@ function drawStations(){
     });
 }
 
+// Обновляет станцию счетчики u i.
 function updateStationCountsUI(){
     const el = document.getElementById('stationBatteryCounts');
     if (!el) return;
@@ -963,11 +978,13 @@ function updateStationCountsUI(){
     }).join('');
 }
 
+// Загружает город.
 async function loadCity(){
 	const city = document.getElementById('city').value;
 	await fetch('/api/load_city', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({city})});
 }
 
+// Разбирает maybe координаты.
 function parseMaybeCoords(s){
 	if (!s) return null;
 	if (s.includes(',')){
@@ -976,6 +993,7 @@ function parseMaybeCoords(s){
 	return null;
 }
 
+// Создает заказ по данным формы и отправляет его на сервер.
 async function submitOrder(){
     const type = document.getElementById('type').value;
     const droneTypeEl = document.getElementById('droneType');
@@ -1050,6 +1068,7 @@ async function submitOrder(){
     }
 }
 
+// Включает режим click.
 function useClick(which){
     currentPick = which;
 }
@@ -1124,11 +1143,13 @@ map.on('mouseup', async (e)=>{
     if (tempRect) { map.removeLayer(tempRect); tempRect = null; }
 });
 
+// Очищает зоны.
 async function clearZones(){
 	const res = await (await fetch('/api/no_fly_zones')).json();
 	for (const z of res){ await fetch(`/api/no_fly_zones/${z.id}`, {method:'DELETE'}); }
 }
 
+// Находит ближайшую станцию index.
 function nearestStationIndex(lat, lng){
     let bi = -1; let bd = 1e18;
     for (let i=0;i<stations.length;i++){
@@ -1147,12 +1168,15 @@ map.on('contextmenu', async (e)=>{
     if (idx >= 0){ stations.splice(idx, 1); drawStations(); await pushStations(); }
 });
 
+// Отправляет станции.
 async function pushStations(){
     await fetch('/api/stations', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({stations})});
 }
 
+// Очищает станции.
 function clearStations(){ stations = []; drawStations(); }
 
+// Массово добавляет add станции.
 function bulkAddStations(){
     const t = (document.getElementById('stationsBulk').value||'').trim();
     if (!t) return;
@@ -1164,15 +1188,18 @@ function bulkAddStations(){
     pushStationsDebounced();
 }
 
+// Отменяет заказ.
 async function cancelOrder(id){
     if (!id) return;
     await fetch(`/api/orders/${id}/cancel`, {method:'POST'});
 }
 
+// Выбирает новый точку доставки.
 function pickNewDestination(orderId){
     changeDestOrderId = orderId;
 }
 
+// Обновляет заказ точку доставки.
 async function updateOrderDestination(orderId, coords){
     await fetch(`/api/orders/${orderId}/update_destination`, {
         method:'POST',
@@ -1190,6 +1217,7 @@ themeToggle.addEventListener('change', ()=>{
 document.getElementById('droneType').addEventListener('change', updateOrderFormByDroneType);
 document.querySelectorAll('input[name="operatorMode"]').forEach(el=> el.addEventListener('change', updateOrderFormByDroneType));
 
+// Переводит статус статус.
 function ruStatus(s){
     return ({
 'idle':'свободен', 'enroute':'в пути', 'avoidance':'обход препятствия', 'holding':'ожидание', 'low_battery':'низкий заряд', 'zone_escape':'выход из запретной зоны',
@@ -1197,15 +1225,18 @@ function ruStatus(s){
 'assigned':'назначен', 'queued':'в очереди', 'cancelled':'отменён', 'completed':'выполнен', 'failed':'аварийно завершён'
     })[s]||s;
 }
+// Выполняет служебную операцию: дрон тип ru.
 function droneTypeRu(t){
     return ({ 'cargo':'грузовой', 'operator':'операторский', 'cleaner':'сервисный' })[t]||t||'—';
 }
 
+// Фокусирует интерфейс на дрон.
 function focusDrone(id){
     const m = droneMarkers[id];
     if (m){ map.setView(m.getLatLng(), 15); m.openPopup(); }
 }
 
+// Запрашивает адрес.
 async function fetchStreet(latlng, droneId){
     try{
         const [lat, lon] = latlng;
@@ -1216,12 +1247,14 @@ async function fetchStreet(latlng, droneId){
     }catch(e){}
 }
 
+// Выполняет служебную операцию: качество pill.
 function qualityPill(q){
     let cls = q>=0.75? 'good' : (q>=0.4? 'warn' : 'bad');
     const pct = Math.round(q*100);
     return `<span class="pill ${cls}">связь ${pct}%</span>`;
 }
 
+// Сохраняет базу.
 async function saveBase(){
     const b = document.getElementById('base').value.trim();
     const bc = parseMaybeCoords(b);

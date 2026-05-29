@@ -180,16 +180,24 @@
       EMERGENCY_LANDING: 'Аварийная посадка',
     };
 
+    // Форматирует числовое значение.
     function money(value){ return Number(value || 0).toFixed(2); }
+    // Выполняет служебную операцию: дрон тип label.
     function droneTypeLabel(type){ return DRONE_TYPE_LABELS[type] || type || '—'; }
+    // Выполняет служебную операцию: статус label.
     function statusLabel(status){ return STATUS_LABELS[status] || status || '—'; }
+    // Выполняет служебную операцию: событие тип label.
     function eventTypeLabel(type){ return EVENT_TYPE_LABELS[type] || type || 'Событие'; }
+    // Выполняет служебную операцию: format ts.
     function formatTs(value){ return value ? String(value).replace('T', ' ').replace('Z', ' UTC') : '—'; }
+    // Проверяет миссию archived.
     function isMissionArchived(mission){ return ['completed', 'cancelled', 'failed', 'synthetic_ready'].includes(mission?.status); }
+    // Обрабатывает миссию runtime-состояние историю.
     function missionRuntimeHistory(mission){
       if (!mission?.drone_id) return [];
       return (liveState.histories || {})[mission.drone_id] || [];
     }
+    // Сглаживает трек.
     function smoothTrack(points, windowSize = 5){
       if (!points || points.length < 3) return points || [];
       const result = [];
@@ -202,6 +210,7 @@
       }
       return result;
     }
+    // Очищает миссию layers.
     function clearMissionLayers(){
       if (rawLayer) { map.removeLayer(rawLayer); rawLayer = null; }
       if (processedLayer) { map.removeLayer(processedLayer); processedLayer = null; }
@@ -210,12 +219,14 @@
       missionMarkerLayer.clearLayers();
     }
 
+    // Устанавливает map action.
     function setMapAction(action){
       mapAction = action;
       const label = action === 'destination' ? 'следующий клик меняет точку доставки выбранной миссии' : (action === 'zone' ? 'следующий клик добавляет круговую запретную зону' : 'просмотр');
       document.getElementById('mapActionStatus').textContent = `Режим карты: ${label}.`;
     }
 
+    // Устанавливает миссию область списка.
     function setMissionScope(scope){
       missionScope = scope === 'archive' ? 'archive' : 'active';
       document.getElementById('scopeActiveBtn').classList.toggle('secondary', missionScope !== 'active');
@@ -226,6 +237,7 @@
       loadMissions();
     }
 
+    // Выводит в интерфейс миссию list.
     function renderMissionList(missions){
       const root = document.getElementById('missionList');
       root.innerHTML = '';
@@ -239,6 +251,7 @@
       });
     }
 
+    // Выводит в интерфейс дрон list.
     function renderDroneList(drones){
       const root = document.getElementById('droneList');
       root.innerHTML = '';
@@ -253,6 +266,7 @@
       });
     }
 
+    // Отрисовывает станции зарядки на карте.
     function drawStations(){
       stationLayer.clearLayers();
       (liveState.stations || []).forEach((station, idx) => {
@@ -263,6 +277,7 @@
       });
     }
 
+    // Выводит в интерфейс станцию box.
     function renderStationBox(){
       const root = document.getElementById('stationBox');
       const stations = liveState.stations || [];
@@ -284,6 +299,7 @@
       }).join('');
     }
 
+    // Отрисовывает runtime-состояние зоны.
     function drawRuntimeZones(){
       runtimeZoneLayer.clearLayers();
       (liveState.no_fly_zones || []).forEach((zone, idx) => {
@@ -297,6 +313,7 @@
       });
     }
 
+    // Выводит в интерфейс зону box.
     function renderZoneBox(){
       const root = document.getElementById('zoneBox');
       const zones = [...(liveState.no_fly_zones || [])].sort((a, b) => {
@@ -314,6 +331,7 @@
       }).join('');
     }
 
+    // Отрисовывает выбранную миссию, ее геозоны, точки и треки.
     function drawMission(mission, rawPoints, processedPoints, geozones, focusMap = true){
       clearMissionLayers();
       const runtimeHistory = !isMissionArchived(mission) ? missionRuntimeHistory(mission).map(point => ({ lat: point[0], lon: point[1] })) : [];
@@ -367,6 +385,7 @@
       `;
     }
 
+    // Отрисовывает выбранный дрон маршрут.
     function drawSelectedDroneRoute(route){
       if (plannedRouteLayer) map.removeLayer(plannedRouteLayer);
       const points = (route || [])
@@ -379,6 +398,7 @@
       }
     }
 
+    // Отрисовывает текущее положение дронов в live-режиме.
     function drawRuntimeDrones(){
       droneLayer.clearLayers();
       Object.entries(liveState.drones || {}).forEach(([id, drone]) => {
@@ -389,6 +409,7 @@
       });
     }
 
+    // Запрашивает миссию пакет данных.
     async function fetchMissionBundle(id, includeTracks = false){
       const requests = [
         fetch(`/api/missions/${id}`).then(r => r.json()),
@@ -414,6 +435,7 @@
       };
     }
 
+    // Обновляет выбранный миссию.
     async function refreshSelectedMission(focusMap = false, includeTracks = false){
       if (!selectedMissionId) return;
       try {
@@ -437,6 +459,7 @@
       renderMissionList(latestMissionList);
     }
 
+    // Выбирает миссию.
     async function selectMission(id){
       selectedMissionId = id;
       selectedDroneId = null;
@@ -445,6 +468,7 @@
       await refreshSelectedMission(true, missionScope === 'archive');
     }
 
+    // Запускает синтетическую миссию live-режим демонстрационный сценарий.
     async function runSyntheticLiveDemo(){
       if (missionScope !== 'active'){
         setMissionScope('active');
@@ -474,6 +498,7 @@
       await refreshSelectedMission(true);
     }
 
+    // Обновляет миссию точку доставки.
     async function updateMissionDestination(point){
       if (!selectedMissionId){
         document.getElementById('mapActionStatus').textContent = 'Сначала выберите миссию.';
@@ -495,6 +520,7 @@
       }
     }
 
+    // Отменяет выбранный миссию.
     async function cancelSelectedMission(){
       if (!selectedMissionId){
         document.getElementById('mapActionStatus').textContent = 'Сначала выберите миссию.';
@@ -521,6 +547,7 @@
       }
     }
 
+    // Добавляет runtime-состояние зону.
     async function addRuntimeZone(point){
       const payload = {
         zone_type: 'circle',
@@ -541,12 +568,14 @@
       }
     }
 
+    // Удаляет runtime-состояние зону.
     async function removeRuntimeZone(zoneId){
       await fetch(`/api/no_fly_zones/${zoneId}`, { method: 'DELETE' });
       document.getElementById('mapActionStatus').textContent = `Зона ${zoneId} удалена.`;
       await refreshSelectedMission(false);
     }
 
+    // Выводит в интерфейс события.
     function renderEvents(events){
       const root = document.getElementById('eventsBox');
       if (!events.length){ root.innerHTML = '<div class="muted">Событий пока нет.</div>'; return; }
@@ -559,6 +588,7 @@
       `).join('');
     }
 
+    // Выводит в интерфейс команды log.
     function renderCommandLog(events){
       const root = document.getElementById('commandBox');
       const commands = (events || []).filter(event => event.event_type === 'MISSION_UPDATED');
@@ -575,6 +605,7 @@
       `).join('');
     }
 
+    // Выводит в интерфейс дрон logs.
     function renderDroneLogs(events){
       const root = document.getElementById('droneLogBox');
       if (!events.length){
@@ -590,6 +621,7 @@
       `).join('');
     }
 
+    // Обновляет выбранный дрон.
     async function refreshSelectedDrone(){
       if (!selectedDroneId) return;
       const data = await fetch(`/api/drones/${selectedDroneId}/monitoring`).then(r => r.json());
@@ -624,12 +656,14 @@
       renderDroneList(liveState.drones || {});
     }
 
+    // Выбирает дрон.
     async function selectDrone(id){
       selectedDroneId = id;
       renderDroneList(liveState.drones || {});
       await refreshSelectedDrone();
     }
 
+    // Загружает список миссий для текущего режима отображения.
     async function loadMissions(){
       const data = await fetch(`/api/missions?scope=${missionScope}`).then(r => r.json()).catch(() => ({ missions: [] }));
       latestMissionList = data.missions || [];
@@ -648,6 +682,7 @@
       }
     }
 
+    // Применяет свежий снимок runtime-состояния к карте и панелям.
     function applyRuntimeState(data){
       liveState = {
         drones: data.drones || {},
@@ -683,6 +718,7 @@
       }
     }
 
+    // Загружает runtime-состояние состояние.
     async function loadRuntimeState(){
       try {
         const data = await fetch('/api/state').then(r => r.json());
@@ -691,6 +727,7 @@
       }
     }
 
+    // Устанавливает WebSocket-соединение и подключает live-обновления интерфейса.
     function connectWS(){
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/ws`);

@@ -61,11 +61,13 @@
       nofly: 'добавление запретной зоны',
     };
 
+    // Устанавливает режим.
     function setMode(value){
       mode = value;
       document.getElementById('status').textContent = `Режим: ${MODE_LABELS[value] || value}.`;
     }
 
+    // Выводит в интерфейс зону list.
     function renderZoneList(){
       const root = document.getElementById('zoneList');
       if (!noFlyZones.length){
@@ -75,6 +77,7 @@
       root.innerHTML = noFlyZones.map((zone, idx) => `#${idx + 1}: ${zone.center[0].toFixed(5)}, ${zone.center[1].toFixed(5)} • ${Math.round(zone.radius_m)} м`).join('<br>');
     }
 
+    // Очищает запретную полет зоны.
     function clearNoFlyZones(){
       noFlyZones.forEach(zone => {
         if (zone.marker) map.removeLayer(zone.marker);
@@ -103,6 +106,7 @@
       }
     });
 
+    // Создает live-миссию по выбранным на карте точкам.
     async function launchMission(){
       if (!startPoint || !deliveryPoint){
         document.getElementById('status').textContent = 'Нужно задать старт и точку доставки.';
@@ -134,6 +138,7 @@
       }
     }
 
+    // Создает синтетическую миссию для быстрой демонстрации.
     async function createSynthetic(){
       const response = await fetch('/api/missions/synthetic', {
         method: 'POST',
